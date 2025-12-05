@@ -18,9 +18,20 @@ CREATE TABLE IF NOT EXISTS sites (
 CREATE TABLE IF NOT EXISTS loggers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
     model TEXT,
+    serial_number TEXT,
     depth_offset_cm REAL,
     FOREIGN KEY  (site_id) REFERENCES sites(id)
+);
+
+CREATE TABLE IF NOT EXISTS logger_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    logger_id INTEGER NOT NULL,
+    timestamp DATETIME NOT NULL,
+    event_type TEXT NOT NULL,
+    notes TEXT,
+    FOREIGN KEY (logger_id) REFERENCES loggers(id)
 );
 
 CREATE TABLE IF NOT EXISTS manual_readings (
