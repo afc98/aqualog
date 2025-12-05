@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"aqualog/internal/db"
 
 	"github.com/spf13/cobra"
 )
@@ -18,9 +19,12 @@ var projectAddCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 
-		fmt.Println("Creating project:")
-		fmt.Println("  Name:", name)
-		fmt.Println("  Description:", desc)
+		_, err != db.DB.Exec(
+			`INSERT INTO projects (name, description) VALUES (?, ?)`,
+			name, desc,
+		)
+
+		fmt.Println("Project created:", name)
 
 		// Later: insert into SQLite
 	},
