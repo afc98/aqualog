@@ -4,7 +4,7 @@ Copyright © 2025 Arran Clarke
 package cmd
 
 import (
-	"aqualog/internal/db"
+	"aqualog/db"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -16,16 +16,26 @@ var projectAddCmd = &cobra.Command{
 	Short: "Add a new project",
 	Long:  `Add a new project that can contain multiple data logger sites`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Read flags
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 
-		_, err := db.DB.Exec(
+		// Open database
+		database, err := db.GetDB()
+		if err != nil {
+			fmt.Println("Database error:", err)
+			return
+		}
+		defer database.Close()
+
+		// Insert project
+		_, err = database.Exec(
 			`INSERT INTO projects (name, description) VALUES (?, ?)`,
 			name, desc,
 		)
-
 		if err != nil {
-			fmt.Println("Error:", err)
+			fmt.Println("Failed to create project:", err)
+			return
 		}
 
 		fmt.Println("Project created:", name)
