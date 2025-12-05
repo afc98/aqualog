@@ -1,0 +1,50 @@
+CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    latitude REAL,
+    longitude REAL,
+    description TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+CREATE TABLE IF NOT EXISTS loggers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL,
+    model TEXT,
+    depth_offset_cm REAL,
+    FOREIGN KEY  (site_id) REFERENCES sites(id)
+);
+
+CREATE TABLE IF NOT EXISTS manual_readings (
+    id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER NOT NULL,
+    timestamp DATETIME NOT NULL,
+    value REAT NOT NULL,
+    notes TEXT,
+    FOREIGN KEY (site_id) REFERENCES sites(id)
+);
+
+CREATE TABLE IF NOT EXISTS corrections (
+    if INTEGER PRIMARY KEY AUTOINCREMENT,
+    logger_id INTEGER NOT NULL,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    method TEXT NOT NULL,
+    parameters TEXT NOT NULL,
+    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+);
+
+CREATE TABLE IF NOT EXISTS corrected_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    logger_id INTEGER NOT NULL, 
+    timestamp DATETIME NOT NULL,
+    corrected_value REAL NOT NULL,
+    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+);
