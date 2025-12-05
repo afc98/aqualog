@@ -4,8 +4,8 @@ Copyright © 2025 Arran Clarke
 package cmd
 
 import (
-	"fmt"
 	"aqualog/internal/db"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -19,10 +19,14 @@ var projectAddCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 
-		_, err != db.DB.Exec(
+		_, err := db.DB.Exec(
 			`INSERT INTO projects (name, description) VALUES (?, ?)`,
 			name, desc,
 		)
+
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
 
 		fmt.Println("Project created:", name)
 

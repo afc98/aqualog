@@ -4,6 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"aqualog/internal/db"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -12,15 +13,24 @@ import (
 // projectListCmd represents the projectList command
 var projectListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "List existing projects",
+	Long:  `Lists existing projects`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("projectList called")
+		rows, err := db.DB.Query(`SELECT id, name, description, created_at FROM  projects`)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+		defer rows.Close()
+
+		fmt.Println("Projects:")
+		for rows.Next() {
+			var id int
+			var name, desc, created string
+			rows.Scan(&id, &name, &desc, &created)
+
+			fmt.Printf(" %d. %s - %s (created %s)\n", id, name, desc, created)
+		}
 	},
 }
 
