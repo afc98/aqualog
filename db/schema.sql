@@ -25,6 +25,17 @@ CREATE TABLE IF NOT EXISTS loggers (
     FOREIGN KEY  (site_id) REFERENCES sites(id)
 );
 
+CREATE TABLE IF NOT EXISTS logger_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    logger_id INTEGER NOT NULL,
+    timestamp DATETIME NOT NULL,
+    level_m REAL,
+    temp_c REAL,
+    sal_psu REAL,
+    ec_us REAL,
+    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+);
+
 CREATE TABLE IF NOT EXISTS logger_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     logger_id INTEGER NOT NULL,
@@ -35,10 +46,10 @@ CREATE TABLE IF NOT EXISTS logger_events (
 );
 
 CREATE TABLE IF NOT EXISTS manual_readings (
-    id  INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
-    value REAT NOT NULL,
+    value REAT NOT NULL, -- Water level relative to datum
     notes TEXT,
     FOREIGN KEY (site_id) REFERENCES sites(id)
 );
@@ -54,8 +65,8 @@ CREATE TABLE IF NOT EXISTS corrections (
 
 CREATE TABLE IF NOT EXISTS corrected_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    logger_id INTEGER NOT NULL, 
+    logger_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
-    corrected_value REAL NOT NULL,
+    corrected_value REAL NOT NULL, -- Water level relative to datum
     FOREIGN KEY (logger_id) REFERENCES loggers(id)
 );

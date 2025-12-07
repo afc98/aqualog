@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// projectAddCmd represents the projectAdd command
+// siteAddCmd represents the siteAdd command
 var siteAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Add a new site to a project",
