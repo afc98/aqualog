@@ -56,17 +56,18 @@ CREATE TABLE IF NOT EXISTS manual_readings (
 
 CREATE TABLE IF NOT EXISTS corrections (
     if INTEGER PRIMARY KEY AUTOINCREMENT,
-    logger_id INTEGER NOT NULL,
+    site_id INTEGER NOT NULL,
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     method TEXT NOT NULL,
     parameters TEXT NOT NULL,
-    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+    FOREIGN KEY (site_id) REFERENCES sites(id)
 );
 
 CREATE TABLE IF NOT EXISTS corrected_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    logger_id INTEGER NOT NULL,
+    site_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
     corrected_value REAL NOT NULL, -- Water level relative to datum
-    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+    UNIQUE (site_id, timestamp),
+    FOREIGN KEY (site_id) REFERENCES sites(id)
 );
