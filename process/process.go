@@ -13,6 +13,9 @@ type LoggerRawRow struct {
 	siteID    int
 	Timestamp time.Time
 	RawValue  float64
+	tempC     float64
+	salPSU    float64
+	ecUS      float64
 }
 
 type ManualMeasurement struct {
@@ -67,22 +70,22 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 		if seg == nil {
 			continue
 		}
-		corrected := row.RawValue + seg.Offset
-		insertCorrectedRow(db, siteID, row.Timestamp, corrected)
+		correctedLevel := row.RawValue + seg.Offset
+		insertCorrectedRow(db, siteID, row.Timestamp, correctedLevel, row.tempC, row.salPSU, row.ecUS)
 	}
 	return nil
 }
 
 func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	rows, err := db.Query(`
-	SELECT id, logger_id, timestamp, level_m
+	SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
 	FROM logger_data
 	WHERE logger_id IN (
 	SELECT id FROM loggers WHERE site_id=?)
 	ORDER BY timestamp ASC
 	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("Query logger_data: %w", err)
+		return nil, fmt.Errorf("query logger_data: %w", err)
 	}
 	defer rows.Close()
 
@@ -92,21 +95,21 @@ func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 		var row LoggerRawRow
 		var ts string
 
-		if err := rows.Scan(&row.ID, &row.LoggerID, &ts, &row.RawValue); err != nil {
-			return nil, fmt.Errorf("Scan logger_data: %w", err)
+		if err := rows.Scan(&row.ID, &row.LoggerID, &ts, &row.RawValue, &row.tempC, &row.salPSU, &row.ecUS); err != nil {
+			return nil, fmt.Errorf("scan logger_data: %w", err)
 		}
 
 		// Scan timestamp as string
 		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
 		if err != nil {
-			return nil, fmt.Errorf("Parse timestamp %q: %w", ts, err)
+			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
 		}
 		row.Timestamp = t
 		out = append(out, row)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Rows error: %w", err)
+		return nil, fmt.Errorf("rows error: %w", err)
 	}
 	return out, nil
 }
@@ -119,7 +122,7 @@ func loadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 	ORDER BY timestamp ASC
 	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("Query manual_readings: %w", err)
+		return nil, fmt.Errorf("query manual_readings: %w", err)
 	}
 	defer rows.Close()
 
@@ -130,19 +133,19 @@ func loadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 		var ts string
 
 		if err := rows.Scan(&m.ID, &m.SiteID, &ts, &m.Level); err != nil {
-			return nil, fmt.Errorf("Scan manual_measurements: %w", err)
+			return nil, fmt.Errorf("scan manual_measurements: %w", err)
 		}
 
 		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
 		if err != nil {
-			return nil, fmt.Errorf("Parse timestamp %q: %w", ts, err)
+			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
 		}
 		m.Timestamp = t
 		out = append(out, m)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Row iteration error: %w", err)
+		return nil, fmt.Errorf("row iteration error: %w", err)
 	}
 
 	return out, nil
@@ -193,7 +196,7 @@ func buildOffsetSegments(
 ) ([]OffsetSegment, error) {
 
 	if len(raw) == 0 {
-		return nil, fmt.Errorf("No raw data available")
+		return nil, fmt.Errorf("no raw data available")
 	}
 
 	// Find raw value at or nearest before timestamp
@@ -366,13 +369,16 @@ func insertCorrectedRow(
 	db *sql.DB,
 	siteID int,
 	ts time.Time,
-	corrected float64,
+	correctedLevel float64,
+	tempC float64,
+	salPSU float64,
+	ecUS float64,
 ) error {
 
 	_, err := db.Exec(`
-        INSERT OR REPLACE INTO corrected_data (site_id, timestamp, corrected_value)
-        VALUES (?, ?, ?)
-    `, siteID, ts, corrected)
+        INSERT OR REPLACE INTO corrected_data (site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `, siteID, ts, correctedLevel, tempC, salPSU, ecUS)
 
 	return err
 }

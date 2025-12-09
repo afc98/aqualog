@@ -109,7 +109,7 @@ var loggerImportCmd = &cobra.Command{
 			_, err = database.Exec(`
 				INSERT INTO logger_data (logger_id, timestamp, level_m, temp_c, sal_psu, ec_us)
 				VALUES (?, ?, ?, ?, ?, ?)
-			`, loggerID, rec.Timestamp, rec.LevelM, rec.TempC, rec.SalPSU, rec.EC)
+			`, loggerID, rec.Timestamp.Format("2006-01-02 15:04:05Z"), rec.LevelM, rec.TempC, rec.SalPSU, rec.EC)
 			if err != nil {
 				fmt.Printf("Failed to insert record at %s: %v\n", rec.Timestamp, err)
 				return

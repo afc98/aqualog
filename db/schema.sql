@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS corrected_data (
     site_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
     corrected_value REAL NOT NULL, -- Water level relative to datum
+    temp_c REAL,
+    sal_psu REAL,
+    ec_us REAL,
     UNIQUE (site_id, timestamp),
     FOREIGN KEY (site_id) REFERENCES sites(id)
 );
