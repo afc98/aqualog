@@ -233,9 +233,8 @@ func buildOffsetSegments(
 		return nil, fmt.Errorf("no raw data available")
 	}
 
-	// Find raw value at or nearest before timestamp
+	// Helper: find the last raw row at or before ts
 	getRawAt := func(ts time.Time) *LoggerRawRow {
-		// simple binary search
 		var prev *LoggerRawRow
 		for i := range raw {
 			if raw[i].Timestamp.After(ts) {
@@ -246,10 +245,7 @@ func buildOffsetSegments(
 		return prev
 	}
 
-	var segments []OffsetSegment
-
-	// Determine the timeline breakpoints
-	// Combine events and manual measurements into a chronological list
+	// Merge events and manual readings into a single chronological list
 	type marker struct {
 		Time   time.Time
 		Kind   string // "event" or "manual"
@@ -258,7 +254,6 @@ func buildOffsetSegments(
 	}
 
 	var markers []marker
-
 	for i := range events {
 		markers = append(markers, marker{
 			Time:  events[i].Timestamp,
@@ -266,7 +261,6 @@ func buildOffsetSegments(
 			Event: &events[i],
 		})
 	}
-
 	for i := range manual {
 		markers = append(markers, marker{
 			Time:   manual[i].Timestamp,
@@ -279,54 +273,69 @@ func buildOffsetSegments(
 		return markers[i].Time.Before(markers[j].Time)
 	})
 
-	// State while we walk the timeline
-	var (
-		currentStart  time.Time
-		currentOffset float64
-		haveOffset    bool
-		loggerActive  bool
-	)
+	var segments []OffsetSegment
+	var currentStart time.Time
+	var currentOffset float64
+	var haveOffset bool
+	loggerActive := false
 
-	// Initialize with first install event
 	for _, m := range markers {
-		if m.Kind == "event" && m.Event.Type == "installed" {
-			loggerActive = true
-			currentStart = m.Time
-
-			// Try to set offset from nearest raw
-			if r := getRawAt(m.Time); r != nil {
-				currentOffset = 0 // baseline offset
-				haveOffset = true
-			} else {
-				currentOffset = 0
-				haveOffset = true
-			}
-			break
-		}
-	}
-
-	if !loggerActive {
-		return nil, fmt.Errorf("no install event found")
-	}
-
-	// Walk through markers and create segments
-	for i := range markers {
-		m := markers[i]
-
-		if m.Time.Before(currentStart) {
-			continue
-		}
 
 		switch m.Kind {
+		case "event":
+			switch m.Event.Type {
+
+			case "installed":
+				// Close previous segment if logger was active
+				if loggerActive && haveOffset {
+					segments = append(segments, OffsetSegment{
+						Start:  currentStart,
+						End:    m.Time,
+						Offset: currentOffset,
+						Source: "before_reinstall",
+					})
+				}
+
+				// Logger is now active
+				loggerActive = true
+				currentStart = m.Time
+				// Keep the current offset if we have one (for reinstallations)
+				// It will be updated by the next manual reading if one exists
+
+			case "moved":
+				if loggerActive && haveOffset {
+					segments = append(segments, OffsetSegment{
+						Start:  currentStart,
+						End:    m.Time,
+						Offset: currentOffset,
+						Source: "before_move",
+					})
+				}
+				currentStart = m.Time
+				haveOffset = false
+
+			case "removed":
+				if loggerActive && haveOffset {
+					segments = append(segments, OffsetSegment{
+						Start:  currentStart,
+						End:    m.Time,
+						Offset: currentOffset,
+						Source: "before_removal",
+					})
+				}
+				loggerActive = false
+				// Keep haveOffset true so we can reuse the offset if reinstalled
+				// without a new manual reading
+			}
 
 		case "manual":
-			// Close the segment up to this manual timestamp
-			if haveOffset && !m.Time.Equal(currentStart) {
+			// Close current segment if we have one
+			if loggerActive && haveOffset && !m.Time.Equal(currentStart) {
 				segments = append(segments, OffsetSegment{
 					Start:  currentStart,
 					End:    m.Time,
 					Offset: currentOffset,
-					Source: "previous",
+					Source: "before_manual",
 				})
 			}
 
@@ -334,45 +343,12 @@ func buildOffsetSegments(
 			if r := getRawAt(m.Time); r != nil {
 				currentOffset = m.Manual.Level - r.RawValue
 				haveOffset = true
-			}
-			currentStart = m.Time
-
-		case "event":
-			switch m.Event.Type {
-			case "installed":
-				// Already handled during initialization; skip
-				continue
-
-			case "moved":
-				// End previous segment
-				if haveOffset {
-					segments = append(segments, OffsetSegment{
-						Start:  currentStart,
-						End:    m.Time,
-						Offset: currentOffset,
-						Source: "previous",
-					})
-				}
-				// Start new segment with unknown offset
-				haveOffset = false
 				currentStart = m.Time
-
-			case "removed":
-				if haveOffset {
-					segments = append(segments, OffsetSegment{
-						Start:  currentStart,
-						End:    m.Time,
-						Offset: currentOffset,
-						Source: "end",
-					})
-				}
-				loggerActive = false
-				return segments, nil
 			}
 		}
 	}
 
-	// Close final segment up to end of raw data
+	// If logger is still active at the end, close final segment up to last raw row
 	if loggerActive && haveOffset {
 		segments = append(segments, OffsetSegment{
 			Start:  currentStart,

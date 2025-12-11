@@ -21,7 +21,7 @@ var loggerProcessCmd = &cobra.Command{
 			return
 		}
 		defer database.Close()
-
+		fmt.Println("Processing logger data...")
 		err = process.ProcessLoggerData(database, siteID)
 		if err != nil {
 			fmt.Printf("Failed to process logger data for site %d, %w", siteID, err)
