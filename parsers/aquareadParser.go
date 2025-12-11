@@ -1,4 +1,4 @@
-package aquaread
+package parsers
 
 import (
 	"bufio"
@@ -135,14 +135,6 @@ func splitTSV(s string) []string {
 func parseFloat(s string) float64 {
 	v, _ := strconv.ParseFloat(s, 64)
 	return v
-}
-
-func parseFloatPtr(s string) *float64 {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return nil
-	}
-	return &v
 }
 
 func indexOf(slice []string, target string) int {

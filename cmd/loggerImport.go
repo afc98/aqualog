@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"aqualog/aquaread"
 	"aqualog/db"
+	"aqualog/parsers"
 	"database/sql"
 	"fmt"
 	"os"
@@ -24,12 +24,12 @@ var loggerImportCmd = &cobra.Command{
 			fmt.Printf("Could not open file: %w", err)
 			return
 		}
-		var meta aquaread.Metadata
-		var recs []aquaread.Record
+		var meta parsers.Metadata
+		var recs []parsers.Record
 		switch fileType {
 		case "aquaread":
 			fmt.Printf("Importing Aquaread file: %s (site %d)\n", filePath, siteID)
-			parsedData, err := aquaread.ParseAquaread(filePath)
+			parsedData, err := parsers.ParseAquaread(filePath)
 			if err != nil {
 				fmt.Println("Failed to parse aquaread data")
 				return
@@ -37,8 +37,14 @@ var loggerImportCmd = &cobra.Command{
 			meta = parsedData.Metadata
 			recs = parsedData.Records
 		case "solinst":
-			fmt.Println("Solinst logger filetype support is not yet implemented")
-			return
+			fmt.Printf("Importing Aquaread file: %s (site %d)\n", filePath, siteID)
+			parsedData, err := parsers.ParseSolinst(filePath)
+			if err != nil {
+				fmt.Println("Failed to parse aquaread data")
+				return
+			}
+			meta = parsedData.Metadata
+			recs = parsedData.Records
 		case "in-situ":
 			fmt.Println("In-Situ logger filetype support is not yet implemented")
 			return

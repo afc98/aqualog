@@ -1,4 +1,4 @@
-package aquaread
+package parsers
 
 import "time"
 

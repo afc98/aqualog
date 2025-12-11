@@ -46,7 +46,7 @@ var manualAddCmd = &cobra.Command{
 
 func init() {
 	manualAddCmd.Flags().IntP("site", "s", 0, "Site ID")
-	manualAddCmd.Flags().Float64P("waterlevel", "w", 0, "Water Level")
+	manualAddCmd.Flags().Float64P("waterlevel", "w", 0, "Water level")
 	manualAddCmd.Flags().StringP("time", "t", "", "Timestamp")
 	manualAddCmd.Flags().StringP("notes", "n", "", "Notes")
 

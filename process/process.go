@@ -78,11 +78,12 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 
 func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	rows, err := db.Query(`
-	SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
-	FROM logger_data
-	WHERE logger_id IN (
-	SELECT id FROM loggers WHERE site_id=?)
-	ORDER BY timestamp ASC
+		SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
+		FROM logger_data
+		WHERE logger_id IN (
+			SELECT id FROM loggers WHERE site_id=?
+		)
+		ORDER BY timestamp ASC
 	`, siteID)
 	if err != nil {
 		return nil, fmt.Errorf("query logger_data: %w", err)
@@ -95,22 +96,55 @@ func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 		var row LoggerRawRow
 		var ts string
 
-		if err := rows.Scan(&row.ID, &row.LoggerID, &ts, &row.RawValue, &row.tempC, &row.salPSU, &row.ecUS); err != nil {
+		// Allow nullable fields
+		var tempC sql.NullFloat64
+		var salPSU sql.NullFloat64
+		var ecUS sql.NullFloat64
+
+		if err := rows.Scan(
+			&row.ID,
+			&row.LoggerID,
+			&ts,
+			&row.RawValue,
+			&tempC,
+			&salPSU,
+			&ecUS,
+		); err != nil {
 			return nil, fmt.Errorf("scan logger_data: %w", err)
 		}
 
-		// Scan timestamp as string
 		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
 		if err != nil {
 			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
 		}
 		row.Timestamp = t
+
+		// Convert NullFloat64 -> float64 (use 0 for NULL or choose sentinel)
+		if tempC.Valid {
+			row.tempC = tempC.Float64
+		} else {
+			row.tempC = 0
+		}
+
+		if salPSU.Valid {
+			row.salPSU = salPSU.Float64
+		} else {
+			row.salPSU = 0 // or NaN, or leave as 0
+		}
+
+		if ecUS.Valid {
+			row.ecUS = ecUS.Float64
+		} else {
+			row.ecUS = 0
+		}
+
 		out = append(out, row)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows error: %w", err)
 	}
+
 	return out, nil
 }
 
