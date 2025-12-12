@@ -135,5 +135,5 @@ func init() {
 	loggerImportCmd.MarkFlagRequired(("type"))
 	loggerImportCmd.MarkFlagRequired(("site"))
 
-	loggerCmd.AddCommand(loggerImportCmd)
+	rootCmd.AddCommand(loggerImportCmd)
 }

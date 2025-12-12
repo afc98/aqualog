@@ -15,7 +15,12 @@ var loggerListCmd = &cobra.Command{
 	Short: "List existing loggers for a site",
 	Long:  `Lists existing projects`,
 	Run: func(cmd *cobra.Command, args []string) {
-		siteID, _ := cmd.Flags().GetInt("site")
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 		// Open database
 		database, err := db.GetDB()
 		if err != nil {
@@ -50,6 +55,6 @@ var loggerListCmd = &cobra.Command{
 func init() {
 	loggerCmd.AddCommand(loggerListCmd)
 
-	loggerListCmd.Flags().IntP("site", "s", 0, "Site ID")
+	loggerListCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	loggerListCmd.MarkFlagRequired("site")
 }

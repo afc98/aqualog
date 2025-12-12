@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loggerEventAddCmd = &cobra.Command{
+var eventAddCmd = &cobra.Command{
 	Use:   "event",
 	Short: "Add a logger event (installed, moved, removed, other)",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -61,14 +61,14 @@ var loggerEventAddCmd = &cobra.Command{
 }
 
 func init() {
-	loggerEventAddCmd.Flags().IntP("logger", "l", 0, "Logger ID")
-	loggerEventAddCmd.Flags().StringP("type", "t", "", "Event Type (install/move/remove)")
-	loggerEventAddCmd.Flags().StringP("time", "i", "", "Timestamp for event")
-	loggerEventAddCmd.Flags().StringP("notes", "n", "", "Notes")
+	eventAddCmd.Flags().IntP("logger", "l", 0, "Logger ID")
+	eventAddCmd.Flags().StringP("type", "t", "", "Event Type (install/move/remove)")
+	eventAddCmd.Flags().StringP("time", "i", "", "Timestamp for event")
+	eventAddCmd.Flags().StringP("notes", "n", "", "Notes")
 
-	loggerEventAddCmd.MarkFlagRequired("logger")
-	loggerEventAddCmd.MarkFlagRequired("type")
-	loggerEventAddCmd.MarkFlagRequired("time")
+	eventAddCmd.MarkFlagRequired("logger")
+	eventAddCmd.MarkFlagRequired("type")
+	eventAddCmd.MarkFlagRequired("time")
 
-	loggerCmd.AddCommand(loggerEventAddCmd)
+	eventCmd.AddCommand(eventAddCmd)
 }

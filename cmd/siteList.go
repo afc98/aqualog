@@ -15,7 +15,12 @@ var siteListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List existing sites",
 	Run: func(cmd *cobra.Command, args []string) {
-		projectID, _ := cmd.Flags().GetInt("project")
+		projectIdent, _ := cmd.Flags().GetString("project") // accepts "123" or "My Project"
+		projectID, err := db.ResolveProjectIdentifier(projectIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 
 		// Open database
 		database, err := db.GetDB()
@@ -47,6 +52,6 @@ var siteListCmd = &cobra.Command{
 
 func init() {
 	siteCmd.AddCommand(siteListCmd)
-	siteListCmd.Flags().IntP("project", "p", 0, "Project ID to list sites")
+	siteListCmd.Flags().StringP("project", "p", "", "Project ID or name to list sites")
 	siteListCmd.MarkFlagRequired("project")
 }

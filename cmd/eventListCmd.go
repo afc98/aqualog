@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loggerEventListCmd = &cobra.Command{
+var eventListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List logger events (filter by site and/or logger)",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -95,8 +95,8 @@ var loggerEventListCmd = &cobra.Command{
 }
 
 func init() {
-	loggerEventAddCmd.AddCommand(loggerEventListCmd)
+	eventCmd.AddCommand(eventListCmd)
 
-	loggerEventListCmd.Flags().IntP("site", "s", 0, "Filter by Site ID")
-	loggerEventListCmd.Flags().IntP("logger", "l", 0, "Filter by Logger ID")
+	eventListCmd.Flags().IntP("site", "s", 0, "Filter by Site ID")
+	eventListCmd.Flags().IntP("logger", "l", 0, "Filter by Logger ID")
 }

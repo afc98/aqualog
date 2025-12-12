@@ -11,7 +11,13 @@ var manualListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List existing manual readings for a site",
 	Run: func(cmd *cobra.Command, args []string) {
-		siteID, _ := cmd.Flags().GetInt("site")
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
+
 		// Open database
 		database, err := db.GetDB()
 		if err != nil {
@@ -46,6 +52,6 @@ var manualListCmd = &cobra.Command{
 func init() {
 	manualCmd.AddCommand(manualListCmd)
 
-	manualListCmd.Flags().IntP("site", "s", 0, "Site ID")
+	manualListCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	manualListCmd.MarkFlagRequired("site")
 }

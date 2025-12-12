@@ -8,11 +8,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loggerProcessCmd = &cobra.Command{
+var processCmd = &cobra.Command{
 	Use:   "process",
 	Short: "Process raw logger data using manual readings.",
 	Run: func(cmd *cobra.Command, args []string) {
-		siteID, _ := cmd.Flags().GetInt("site")
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 
 		// Open database
 		database, err := db.GetDB()
@@ -32,8 +37,8 @@ var loggerProcessCmd = &cobra.Command{
 }
 
 func init() {
-	loggerCmd.AddCommand(loggerProcessCmd)
+	rootCmd.AddCommand(processCmd)
 
-	loggerProcessCmd.Flags().IntP("site", "s", 0, "Site ID")
-	loggerListCmd.MarkFlagRequired("site")
+	processCmd.Flags().StringP("site", "s", "", "Site ID or name")
+	processCmd.MarkFlagRequired("site")
 }

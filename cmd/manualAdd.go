@@ -12,7 +12,12 @@ var manualAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Add a manual (to datum) water level reading",
 	Run: func(cmd *cobra.Command, args []string) {
-		siteID, _ := cmd.Flags().GetInt("site")
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 		waterLevel, _ := cmd.Flags().GetFloat64("waterlevel")
 		timestamp, _ := cmd.Flags().GetString("time")
 		notes, _ := cmd.Flags().GetString("notes")
@@ -45,7 +50,7 @@ var manualAddCmd = &cobra.Command{
 }
 
 func init() {
-	manualAddCmd.Flags().IntP("site", "s", 0, "Site ID")
+	manualAddCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	manualAddCmd.Flags().Float64P("waterlevel", "w", 0, "Water level")
 	manualAddCmd.Flags().StringP("time", "t", "", "Timestamp")
 	manualAddCmd.Flags().StringP("notes", "n", "", "Notes")

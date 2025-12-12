@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loggerEventUpdateCmd = &cobra.Command{
+var eventUpdateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update a logger event by its ID",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -133,12 +133,12 @@ var loggerEventUpdateCmd = &cobra.Command{
 }
 
 func init() {
-	loggerEventUpdateCmd.Flags().IntP("id", "i", 0, "Logger event ID to update")
-	loggerEventUpdateCmd.Flags().StringP("type", "t", "", "Event type (installed, moved, removed, other)")
-	loggerEventUpdateCmd.Flags().StringP("time", "m", "", "Timestamp (YYYYMMDD HH:MM:SS)")
-	loggerEventUpdateCmd.Flags().StringP("notes", "n", "", "Notes (blank keeps existing)")
+	eventUpdateCmd.Flags().IntP("id", "i", 0, "Logger event ID to update")
+	eventUpdateCmd.Flags().StringP("type", "t", "", "Event type (installed, moved, removed, other)")
+	eventUpdateCmd.Flags().StringP("time", "m", "", "Timestamp (YYYYMMDD HH:MM:SS)")
+	eventUpdateCmd.Flags().StringP("notes", "n", "", "Notes (blank keeps existing)")
 
-	loggerEventUpdateCmd.MarkFlagRequired("id")
+	eventUpdateCmd.MarkFlagRequired("id")
 
-	loggerEventAddCmd.AddCommand(loggerEventUpdateCmd)
+	eventCmd.AddCommand(eventUpdateCmd)
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var loggerEventRemoveCmd = &cobra.Command{
+var eventRemoveCmd = &cobra.Command{
 	Use:   "remove",
 	Short: "Remove a logger event by its ID",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -84,8 +84,8 @@ var loggerEventRemoveCmd = &cobra.Command{
 }
 
 func init() {
-	loggerEventRemoveCmd.Flags().IntP("id", "i", 0, "Logger event ID to remove")
-	loggerEventRemoveCmd.MarkFlagRequired("id")
+	eventRemoveCmd.Flags().IntP("id", "i", 0, "Logger event ID to remove")
+	eventRemoveCmd.MarkFlagRequired("id")
 
-	loggerEventAddCmd.AddCommand(loggerEventRemoveCmd)
+	eventCmd.AddCommand(eventRemoveCmd)
 }

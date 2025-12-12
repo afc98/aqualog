@@ -15,7 +15,12 @@ var siteAddCmd = &cobra.Command{
 	Use:   "add",
 	Short: "Add a new site to a project",
 	Run: func(cmd *cobra.Command, args []string) {
-		projectID, _ := cmd.Flags().GetInt("project")
+		projectIdent, _ := cmd.Flags().GetString("project") // accepts "123" or "My Project"
+		projectID, err := db.ResolveProjectIdentifier(projectIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 		name, _ := cmd.Flags().GetString("name")
 		lat, _ := cmd.Flags().GetFloat64("lat")
 		lon, _ := cmd.Flags().GetFloat64("lon")
@@ -43,7 +48,7 @@ var siteAddCmd = &cobra.Command{
 func init() {
 	siteCmd.AddCommand(siteAddCmd)
 
-	siteAddCmd.Flags().IntP("project", "p", 0, "Project ID")
+	siteAddCmd.Flags().StringP("project", "p", "", "Project ID or name")
 	siteAddCmd.Flags().StringP("name", "n", "", "Name of the site")
 	siteAddCmd.Flags().Float64P("lat", "a", 0, "Latitude of the site")
 	siteAddCmd.Flags().Float64P("lon", "o", 0, "Longitude of the site")

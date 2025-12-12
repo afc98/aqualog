@@ -16,7 +16,12 @@ var loggerAddCmd = &cobra.Command{
 	Short: "Add a new logger to a site",
 	Run: func(cmd *cobra.Command, args []string) {
 		// Read flags
-		siteID, _ := cmd.Flags().GetInt("site")
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Project not found:", err)
+			return
+		}
 		name, _ := cmd.Flags().GetString("name")
 		model, _ := cmd.Flags().GetString("model")
 		serial, _ := cmd.Flags().GetString("serial")
@@ -46,7 +51,7 @@ var loggerAddCmd = &cobra.Command{
 func init() {
 	loggerCmd.AddCommand(loggerAddCmd)
 
-	loggerAddCmd.Flags().IntP("site", "s", 0, "Site ID")
+	loggerAddCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	loggerAddCmd.Flags().StringP("name", "n", "", "Logger name")
 	loggerAddCmd.Flags().StringP("model", "m", "", "Logger model")
 	loggerAddCmd.Flags().StringP("serial", "e", "", "Serial number")
