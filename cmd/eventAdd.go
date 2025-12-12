@@ -13,7 +13,12 @@ var eventAddCmd = &cobra.Command{
 	Use:   "event",
 	Short: "Add a logger event (installed, moved, removed, other)",
 	Run: func(cmd *cobra.Command, args []string) {
-		loggerID, _ := cmd.Flags().GetInt("logger")
+		loggerIdent, _ := cmd.Flags().GetString("logger")
+		loggerID, err := db.ResolveLoggerIdentifier(loggerIdent)
+		if err != nil {
+			fmt.Println("Logger not found:", err)
+			return
+		}
 		eventType, _ := cmd.Flags().GetString("type")
 		timestamp, _ := cmd.Flags().GetString("time")
 		notes, _ := cmd.Flags().GetString("notes")
@@ -61,7 +66,7 @@ var eventAddCmd = &cobra.Command{
 }
 
 func init() {
-	eventAddCmd.Flags().IntP("logger", "l", 0, "Logger ID")
+	eventAddCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
 	eventAddCmd.Flags().StringP("type", "t", "", "Event Type (install/move/remove)")
 	eventAddCmd.Flags().StringP("time", "i", "", "Timestamp for event")
 	eventAddCmd.Flags().StringP("notes", "n", "", "Notes")

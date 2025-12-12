@@ -15,7 +15,7 @@ var manualAddCmd = &cobra.Command{
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
-			fmt.Println("Project not found:", err)
+			fmt.Println("Site not found:", err)
 			return
 		}
 		waterLevel, _ := cmd.Flags().GetFloat64("waterlevel")

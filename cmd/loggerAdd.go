@@ -19,7 +19,7 @@ var loggerAddCmd = &cobra.Command{
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
-			fmt.Println("Project not found:", err)
+			fmt.Println("Site not found:", err)
 			return
 		}
 		name, _ := cmd.Flags().GetString("name")

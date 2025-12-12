@@ -11,12 +11,21 @@ var eventListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List logger events (filter by site and/or logger)",
 	Run: func(cmd *cobra.Command, args []string) {
-		siteID, _ := cmd.Flags().GetInt("site")
-		loggerID, _ := cmd.Flags().GetInt("logger")
-
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Site not found:", err)
+			return
+		}
+		loggerIdent, _ := cmd.Flags().GetString("logger")
+		loggerID, err := db.ResolveLoggerIdentifier(loggerIdent)
+		if err != nil {
+			fmt.Println("Logger not found:", err)
+			return
+		}
 		// Must specify at least one filter
 		if siteID == 0 && loggerID == 0 {
-			fmt.Println("You must specify --site <id> and/or --logger <id>")
+			fmt.Println("You must specify --site <id/name> and/or --logger <id/name>")
 			return
 		}
 

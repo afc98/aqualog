@@ -13,12 +13,11 @@ import (
 var loggerListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List existing loggers for a site",
-	Long:  `Lists existing projects`,
 	Run: func(cmd *cobra.Command, args []string) {
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
-			fmt.Println("Project not found:", err)
+			fmt.Println("Site not found:", err)
 			return
 		}
 		// Open database
