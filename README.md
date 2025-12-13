@@ -50,6 +50,7 @@ Aqualog stores information in a hierarchical system as described below:
 ```
 Project
 └── Site
+    ├── Manual readings
     └── Logger
         ├── Events
         └── Time-series Data
