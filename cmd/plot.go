@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	plotSiteID int
+	plotSiteID string
 	plotSeries []string
 	plotStart  string
 	plotEnd    string
@@ -28,8 +28,13 @@ Example:
     aqualog plot --site 3 --series raw_level --series temp --start 2025-01-01 --end 2025-02-01`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		if plotSiteID == 0 {
+		if plotSiteIdent == "" {
 			return fmt.Errorf("--site is required")
+		}
+
+		siteID, err := db.ResolveSiteIdentifier(plotSiteIdent)
+		if err != nil {
+			return fmt.Errorf("site not found: %w", err)
 		}
 
 		// Open database
@@ -83,7 +88,7 @@ Example:
 func init() {
 	rootCmd.AddCommand(plotCmd)
 
-	plotCmd.Flags().IntVar(&plotSiteID, "site", 0, "Site ID")
+	plotCmd.Flags().StringVar(&plotSiteID, "site", "", "Site ID or name")
 	plotCmd.Flags().StringArrayVar(&plotSeries, "series", []string{}, "Series to plot (repeatable)")
 	plotCmd.Flags().StringVar(&plotStart, "start", "", "Start date (YYYY-MM-DD)")
 	plotCmd.Flags().StringVar(&plotEnd, "end", "", "End date (YYYY-MM-DD)")
