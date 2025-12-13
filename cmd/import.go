@@ -17,9 +17,18 @@ var loggerImportCmd = &cobra.Command{
 		// Read flags
 		fileType, _ := cmd.Flags().GetString("type")
 		filePath, _ := cmd.Flags().GetString("file")
-		siteID, _ := cmd.Flags().GetInt("site")
-		loggerID, _ := cmd.Flags().GetInt("logger")
-
+		siteIdent, _ := cmd.Flags().GetString("site")
+		siteID, err := db.ResolveSiteIdentifier(siteIdent)
+		if err != nil {
+			fmt.Println("Site not found:", err)
+			return
+		}		
+		loggerIdent, _ := cmd.Flags().GetString("logger")
+		loggerID, err := db.ResolveLoggerIdentifier(loggerIdent)
+		if err != nil {
+			fmt.Println("Logger not found:", err)
+			return
+		}
 		if _, err := os.Stat(filePath); err != nil {
 			fmt.Printf("Could not open file: %w", err)
 			return
@@ -128,8 +137,8 @@ var loggerImportCmd = &cobra.Command{
 func init() {
 	loggerImportCmd.Flags().StringP("file", "f", "", "Logger file")
 	loggerImportCmd.Flags().StringP("type", "t", "", "File type")
-	loggerImportCmd.Flags().IntP("site", "s", 0, "Site ID")
-	loggerImportCmd.Flags().IntP("logger", "l", -1, "Site ID")
+	loggerImportCmd.Flags().StringP("site", "s", 0, "Site ID")
+	loggerImportCmd.Flags().StringP("logger", "l", -1, "Site ID")
 
 	loggerImportCmd.MarkFlagRequired(("file"))
 	loggerImportCmd.MarkFlagRequired(("type"))
