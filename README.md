@@ -211,3 +211,11 @@ Supported series include level, EC, salinity, and temperature.
 ```bash
 ./aqualog plot --site "Site 1" --series level
 ```
+
+### Export Processed Data
+
+Supported series include level, EC, salinity, and temperature.
+
+```bash
+./aqualog export --site "Site 1" --file "output.csv"
+```
