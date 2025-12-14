@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	plotSiteID string
+	plotSiteIdent	string
+	plotSiteID int
 	plotSeries []string
 	plotStart  string
 	plotEnd    string
@@ -32,7 +33,7 @@ Example:
 			return fmt.Errorf("--site is required")
 		}
 
-		siteID, err := db.ResolveSiteIdentifier(plotSiteIdent)
+		plotSiteID, err := db.ResolveSiteIdentifier(plotSiteIdent)
 		if err != nil {
 			return fmt.Errorf("site not found: %w", err)
 		}
@@ -88,7 +89,7 @@ Example:
 func init() {
 	rootCmd.AddCommand(plotCmd)
 
-	plotCmd.Flags().StringVar(&plotSiteID, "site", "", "Site ID or name")
+	plotCmd.Flags().StringVar(&plotSiteIdent, "site", "", "Site ID or name")
 	plotCmd.Flags().StringArrayVar(&plotSeries, "series", []string{}, "Series to plot (repeatable)")
 	plotCmd.Flags().StringVar(&plotStart, "start", "", "Start date (YYYY-MM-DD)")
 	plotCmd.Flags().StringVar(&plotEnd, "end", "", "End date (YYYY-MM-DD)")

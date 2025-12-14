@@ -109,9 +109,10 @@ var manualUpdateCmd = &cobra.Command{
 
 func init() {
 	manualUpdateCmd.Flags().IntP("id", "i", 0, "Manual reading ID to update")
-	manualUpdateCmd.Flags().StringP("time", "t", "", "Timestamp (YYYYMMDD HH:MM:SS)")
+	manualUpdateCmd.Flags().StringP("time", "T", "", "Timestamp (YYYYMMDD HH:MM:SS)")
 	manualUpdateCmd.Flags().Float64P("waterlevel", "w", -1, "Water level (or -1 to leave unchanged)")
-	manualUpdateCmd.Flags().StringP("notes", "n", "", "Notes (leave blank to keep existing)")
+	manualUpdateCmd.Flags().StringP("notes", "N", "", "Notes (leave blank to keep existing)")
+	
 	manualUpdateCmd.MarkFlagRequired("id")
 
 	manualCmd.AddCommand(manualUpdateCmd)

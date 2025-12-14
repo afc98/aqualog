@@ -48,7 +48,7 @@ func init() {
 	projectCmd.AddCommand(projectAddCmd)
 
 	projectAddCmd.Flags().StringP("name", "n", "", "Name of the project")
-	projectAddCmd.Flags().StringP("description", "d", "", "Description of the project")
-
+	projectAddCmd.Flags().StringP("notes", "N", "", "Notes on the project")
+	
 	projectAddCmd.MarkFlagRequired("name")
 }

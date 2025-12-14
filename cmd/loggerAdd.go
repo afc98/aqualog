@@ -54,8 +54,8 @@ func init() {
 	loggerAddCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	loggerAddCmd.Flags().StringP("name", "n", "", "Logger name")
 	loggerAddCmd.Flags().StringP("model", "m", "", "Logger model")
-	loggerAddCmd.Flags().StringP("serial", "e", "", "Serial number")
-
+	loggerAddCmd.Flags().StringP("serial", "S", "", "Serial number")
+	
 	loggerAddCmd.MarkFlagRequired("site")
 	loggerAddCmd.MarkFlagRequired("name")
 }

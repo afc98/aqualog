@@ -137,8 +137,8 @@ var loggerImportCmd = &cobra.Command{
 func init() {
 	loggerImportCmd.Flags().StringP("file", "f", "", "Logger file")
 	loggerImportCmd.Flags().StringP("type", "t", "", "File type")
-	loggerImportCmd.Flags().StringP("site", "s", 0, "Site ID")
-	loggerImportCmd.Flags().StringP("logger", "l", -1, "Site ID")
+	loggerImportCmd.Flags().StringP("site", "s", "", "Site ID")
+	loggerImportCmd.Flags().StringP("logger", "l", "", "Site ID")
 
 	loggerImportCmd.MarkFlagRequired(("file"))
 	loggerImportCmd.MarkFlagRequired(("type"))

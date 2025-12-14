@@ -107,5 +107,4 @@ func init() {
 	eventCmd.AddCommand(eventListCmd)
 
 	eventListCmd.Flags().IntP("site", "s", 0, "Filter by Site ID")
-	eventListCmd.Flags().IntP("logger", "l", 0, "Filter by Logger ID")
-}
+	eventListCmd.Flags().IntP("logger", "l", 0, "Filter by Logger ID")	}

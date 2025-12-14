@@ -135,9 +135,8 @@ var eventUpdateCmd = &cobra.Command{
 func init() {
 	eventUpdateCmd.Flags().IntP("id", "i", 0, "Logger event ID to update")
 	eventUpdateCmd.Flags().StringP("type", "t", "", "Event type (installed, moved, removed, other)")
-	eventUpdateCmd.Flags().StringP("time", "m", "", "Timestamp (YYYYMMDD HH:MM:SS)")
-	eventUpdateCmd.Flags().StringP("notes", "n", "", "Notes (blank keeps existing)")
-
+	eventUpdateCmd.Flags().StringP("time", "T", "", "Timestamp (YYYYMMDD HH:MM:SS)")
+	eventUpdateCmd.Flags().StringP("notes", "N", "", "Notes (blank keeps existing)")
 	eventUpdateCmd.MarkFlagRequired("id")
 
 	eventCmd.AddCommand(eventUpdateCmd)
