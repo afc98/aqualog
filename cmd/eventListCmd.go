@@ -12,17 +12,27 @@ var eventListCmd = &cobra.Command{
 	Short: "List logger events (filter by site and/or logger)",
 	Run: func(cmd *cobra.Command, args []string) {
 		siteIdent, _ := cmd.Flags().GetString("site")
-		siteID, err := db.ResolveSiteIdentifier(siteIdent)
-		if err != nil {
-			fmt.Println("Site not found:", err)
-			return
+		siteID := 0
+		if siteIdent != "" {
+			var err error
+			siteID, err = db.ResolveSiteIdentifier(siteIdent)
+			if err != nil {
+				fmt.Println("Site not found:", err)
+				return
+			}
 		}
+
 		loggerIdent, _ := cmd.Flags().GetString("logger")
-		loggerID, err := db.ResolveLoggerIdentifier(loggerIdent)
-		if err != nil {
-			fmt.Println("Logger not found:", err)
-			return
+		loggerID := 0
+		if loggerIdent != "" {
+			var err error
+			loggerID, err = db.ResolveLoggerIdentifier(loggerIdent)
+			if err != nil {
+				fmt.Println("Logger not found:", err)
+				return
+			}
 		}
+
 		// Must specify at least one filter
 		if siteID == 0 && loggerID == 0 {
 			fmt.Println("You must specify --site <id/name> and/or --logger <id/name>")
@@ -106,6 +116,6 @@ var eventListCmd = &cobra.Command{
 func init() {
 	eventCmd.AddCommand(eventListCmd)
 
-	eventListCmd.Flags().IntP("site", "s", 0, "Filter by Site ID")
-	eventListCmd.Flags().IntP("logger", "l", 0, "Filter by Logger ID")
+	eventListCmd.Flags().StringP("site", "s", "", "Filter by Site ID")
+	eventListCmd.Flags().StringP("logger", "l", "", "Filter by Logger ID")
 }
