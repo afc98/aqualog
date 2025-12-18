@@ -13,10 +13,13 @@ import (
 //go:embed schema.sql
 var schemaFS embed.FS
 
-var dbPath = filepath.Join(os.Getenv("HOME"), ".aqualog", "aqualog.db")
-
 // GetDB returns a ready-to-use database handle
 func GetDB() (*sql.DB, error) {
+	dbPath, err := dbPathFromExecutable()
+	if err != nil {
+		return nil, err
+	}
+
 	//Ensure directory exists
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -35,6 +38,17 @@ func GetDB() (*sql.DB, error) {
 	}
 
 	return database, nil
+}
+
+// Resolve DB path relative to the executable
+func dbPathFromExecutable() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve executable path: %w", err)
+	}
+
+	exeDir := filepath.Dir(exe)
+	return filepath.Join(exeDir, ".aqualog", "aqualog.db"), nil
 }
 
 func applySchema(db *sql.DB) error {

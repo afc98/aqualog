@@ -7,6 +7,11 @@ import (
 	"strconv"
 )
 
+type Site struct {
+	ID   int
+	Name string
+}
+
 func GetProjectIDByName(name string) (int, error) {
 	d, err := GetDB()
 	if err != nil {
@@ -80,4 +85,20 @@ func ResolveLoggerIdentifier(ident string) (int, error) {
 		return id, nil
 	}
 	return GetLoggerIDByName(ident)
+}
+
+func GetSiteByID(db *sql.DB, siteID int) (*Site, error) {
+	var s Site
+
+	err := db.QueryRow(`
+		SELECT id, name
+		FROM sites
+		WHERE id = ?
+	`, siteID).Scan(&s.ID, &s.Name)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &s, nil
 }

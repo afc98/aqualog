@@ -68,8 +68,8 @@ var eventAddCmd = &cobra.Command{
 func init() {
 	eventAddCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
 	eventAddCmd.Flags().StringP("type", "t", "", "Event Type (install/move/remove)")
-	eventAddCmd.Flags().StringP("time", "i", "", "Timestamp for event")
-	eventAddCmd.Flags().StringP("notes", "n", "", "Notes")
+	eventAddCmd.Flags().StringP("time", "T", "", "Timestamp for event")
+	eventAddCmd.Flags().StringP("notes", "N", "", "Notes")
 
 	eventAddCmd.MarkFlagRequired("logger")
 	eventAddCmd.MarkFlagRequired("type")

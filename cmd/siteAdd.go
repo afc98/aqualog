@@ -47,11 +47,11 @@ var siteAddCmd = &cobra.Command{
 
 func init() {
 	siteCmd.AddCommand(siteAddCmd)
-
+	
 	siteAddCmd.Flags().StringP("project", "p", "", "Project ID or name")
 	siteAddCmd.Flags().StringP("name", "n", "", "Name of the site")
-	siteAddCmd.Flags().Float64P("lat", "a", 0, "Latitude of the site")
-	siteAddCmd.Flags().Float64P("lon", "o", 0, "Longitude of the site")
+	siteAddCmd.Flags().Float64P("lat", "y", 0, "Latitude of the site")
+	siteAddCmd.Flags().Float64P("lon", "x", 0, "Longitude of the site")
 
 	siteAddCmd.MarkFlagRequired("project")
 	siteAddCmd.MarkFlagRequired("name")

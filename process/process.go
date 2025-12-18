@@ -43,17 +43,17 @@ type OffsetSegment struct {
 
 func ProcessLoggerData(db *sql.DB, siteID int) error {
 	// Load all logger_data rows for site
-	rawRows, err := loadRawData(db, siteID)
+	rawRows, err := LoadRawData(db, siteID)
 	if err != nil {
 		return err
 	}
 
 	// Load manual measurements and logger events
-	measurements, err := loadManualMeasurements(db, siteID)
+	measurements, err := LoadManualMeasurements(db, siteID)
 	if err != nil {
 		return err
 	}
-	events, err := loadLoggerEvents(db, siteID)
+	events, err := LoadLoggerEvents(db, siteID)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 	return nil
 }
 
-func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
+func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	rows, err := db.Query(`
 		SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
 		FROM logger_data
@@ -148,7 +148,7 @@ func loadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	return out, nil
 }
 
-func loadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error) {
+func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error) {
 	rows, err := db.Query(`
 	SELECT id, site_id, timestamp, value
 	FROM manual_readings
@@ -185,7 +185,7 @@ func loadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 	return out, nil
 }
 
-func loadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
+func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 	rows, err := db.Query(`
         SELECT id, logger_id, event_type, timestamp, notes
         FROM logger_events
