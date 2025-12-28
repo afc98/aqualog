@@ -4,10 +4,10 @@ import (
 	"aqualog/db"
 	"aqualog/process"
 	"database/sql"
-	"fmt"
-	"time"
-	"os"
 	"encoding/csv"
+	"fmt"
+	"os"
+	"time"
 )
 
 type LoggerCorrectedRow struct {
@@ -21,19 +21,27 @@ type LoggerCorrectedRow struct {
 }
 
 type ExportRow struct {
-	Timestamp        string
-	SiteName         string
-	LoggerName       string
-	LoggerModel      string
-	LoggerSerial     string
-	Level            float64
-	ManualReading    *float64
-	CorrectedLevel   float64
-	SalinityPSU      float64
-	ECUS             float64
+	Timestamp      string
+	SiteName       string
+	LoggerName     string
+	LoggerModel    string
+	LoggerSerial   string
+	Level          float64
+	ManualReading  *float64
+	CorrectedLevel float64
+	SalinityPSU    float64
+	ECUS           float64
 }
 
-func ExportData(dbConn *sql.DB, siteID int, fileName string) error {
+func ExportData(siteID int, fileName string) error {
+
+	// Open database
+	dbConn, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("Database error: %w", err)
+	}
+	defer dbConn.Close()
+
 	// Load data
 	rawRows, err := process.LoadRawData(dbConn, siteID)
 	if err != nil {
@@ -97,7 +105,7 @@ func ExportData(dbConn *sql.DB, siteID int, fileName string) error {
 			LoggerModel:    loggerModel,
 			LoggerSerial:   loggerSerial,
 			Level:          rawValueAt(rawRows, row.Timestamp),
-			ManualReading: manual,
+			ManualReading:  manual,
 			CorrectedLevel: row.Value,
 			SalinityPSU:    row.SalPSU,
 			ECUS:           row.ECUS,

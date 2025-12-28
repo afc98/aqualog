@@ -20,15 +20,8 @@ var exportCmd = &cobra.Command{
 			return
 		}
 
-		// Open database
-		database, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
-			return
-		}
-		defer database.Close()
 		fmt.Println("Exporting data...")
-		err = export.ExportData(database, siteID, fileName)
+		err = export.ExportData(siteID, fileName)
 		if err != nil {
 			fmt.Printf("Failed to export logger data for site %d, %w", siteID, err)
 			return
