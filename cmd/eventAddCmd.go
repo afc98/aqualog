@@ -2,15 +2,14 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/event"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
 
 var eventAddCmd = &cobra.Command{
-	Use:   "event",
+	Use:   "add",
 	Short: "Add a logger event (installed, moved, removed, other)",
 	Run: func(cmd *cobra.Command, args []string) {
 		loggerIdent, _ := cmd.Flags().GetString("logger")
@@ -23,45 +22,12 @@ var eventAddCmd = &cobra.Command{
 		timestamp, _ := cmd.Flags().GetString("time")
 		notes, _ := cmd.Flags().GetString("notes")
 
-		// Check that a valid event type is being used
-		eventType = strings.ToLower(eventType)
-		validEvents := map[string]struct{}{
-			"installed": {},
-			"moved":     {},
-			"removed":   {},
-			"other":     {},
-		}
-
-		// Parse and validate timestamp
-		parsedTime, err := time.Parse("20060102 15:04:05", timestamp)
+		err = event.EventAdd(loggerID, eventType, timestamp, notes)
 		if err != nil {
-			fmt.Println("Invalid timestamp format. Use: YYYYMMDD HH:MM:SS")
+			fmt.Printf("Failed to add event for logger %d, %w", loggerID, err)
 			return
 		}
-
-		if _, ok := validEvents[eventType]; !ok {
-			fmt.Println("Unsupported event type. Use: installed, moved, removed, other")
-			return
-		}
-
-		// Open database
-		database, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
-			return
-		}
-		defer database.Close()
-
-		_, err = database.Exec(`
-		INSERT INTO logger_events (logger_id, timestamp, event_type, notes)
-		VALUES (?, ?, ?, ?)
-		`, loggerID, parsedTime, eventType, notes)
-		if err != nil {
-			fmt.Println("Error adding event:", err)
-			return
-		}
-
-		fmt.Println("Event added.")
+		fmt.Println("Successfully added event for logger", loggerID)
 	},
 }
 
