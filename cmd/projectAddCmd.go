@@ -4,7 +4,7 @@ Copyright © 2025 Arran Clarke
 package cmd
 
 import (
-	"aqualog/db"
+	"aqualog/project"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -20,27 +20,13 @@ var projectAddCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		desc, _ := cmd.Flags().GetString("description")
 
-		// Open database
-		database, err := db.GetDB()
+		// Add project
+		err := project.AddProject(name, desc)
 		if err != nil {
-			fmt.Println("Database error:", err)
-			return
-		}
-		defer database.Close()
-
-		// Insert project
-		_, err = database.Exec(
-			`INSERT INTO projects (name, description) VALUES (?, ?)`,
-			name, desc,
-		)
-		if err != nil {
-			fmt.Println("Failed to create project:", err)
+			fmt.Println("Error adding project:", err)
 			return
 		}
 
-		fmt.Println("Project created:", name)
-
-		// Later: insert into SQLite
 	},
 }
 
@@ -49,6 +35,6 @@ func init() {
 
 	projectAddCmd.Flags().StringP("name", "n", "", "Name of the project")
 	projectAddCmd.Flags().StringP("notes", "N", "", "Notes on the project")
-	
+
 	projectAddCmd.MarkFlagRequired("name")
 }
