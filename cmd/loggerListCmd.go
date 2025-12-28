@@ -4,8 +4,8 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"aqualog/db"
-	"aqualog/logger"
+	"aqualog/core/db"
+	"aqualog/core/logger"
 	"fmt"
 
 	"github.com/spf13/cobra"

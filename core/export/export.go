@@ -1,8 +1,8 @@
 package export
 
 import (
-	"aqualog/db"
-	"aqualog/process"
+	"aqualog/core/db"
+	"aqualog/core/process"
 	"database/sql"
 	"encoding/csv"
 	"fmt"

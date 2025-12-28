@@ -6,18 +6,18 @@ import (
 	"log"
 	"time"
 
-	"aqualog/db"
-	aqlplot "aqualog/plot"
+	"aqualog/core/db"
+	aqlplot "aqualog/core/plot"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	plotSiteIdent	string
-	plotSiteID int
-	plotSeries []string
-	plotStart  string
-	plotEnd    string
+	plotSiteIdent string
+	plotSiteID    int
+	plotSeries    []string
+	plotStart     string
+	plotEnd       string
 )
 
 // plotCmd represents the "aqualog plot" command.

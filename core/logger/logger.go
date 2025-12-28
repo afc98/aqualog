@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"aqualog/db"
+	"aqualog/core/db"
 	"fmt"
 )
 

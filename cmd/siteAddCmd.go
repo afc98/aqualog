@@ -4,8 +4,8 @@ Copyright © 2025 Arran Clarke
 package cmd
 
 import (
-	"aqualog/db"
-	"aqualog/site"
+	"aqualog/core/db"
+	"aqualog/core/site"
 	"fmt"
 
 	"github.com/spf13/cobra"

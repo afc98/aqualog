@@ -1,7 +1,7 @@
 package manual
 
 import (
-	"aqualog/db"
+	"aqualog/core/db"
 	"bufio"
 	"fmt"
 	"os"

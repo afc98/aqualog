@@ -1,7 +1,7 @@
 package event
 
 import (
-	"aqualog/db"
+	"aqualog/core/db"
 	"bufio"
 	"fmt"
 	"os"

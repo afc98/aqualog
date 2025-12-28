@@ -1,8 +1,8 @@
 package importer
 
 import (
-	"aqualog/db"
-	"aqualog/parsers"
+	"aqualog/core/db"
+	"aqualog/core/parsers"
 	"database/sql"
 	"fmt"
 	"os"

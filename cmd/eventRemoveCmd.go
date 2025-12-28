@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"aqualog/event"
+	"aqualog/core/event"
 	"fmt"
 
 	"github.com/spf13/cobra"

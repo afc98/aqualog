@@ -1,7 +1,7 @@
 package site
 
 import (
-	"aqualog/db"
+	"aqualog/core/db"
 	"fmt"
 )
 

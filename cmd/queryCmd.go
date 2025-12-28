@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"aqualog/db"
-	"aqualog/query"
+	"aqualog/core/db"
+	"aqualog/core/query"
 	"fmt"
 
 	"github.com/spf13/cobra"

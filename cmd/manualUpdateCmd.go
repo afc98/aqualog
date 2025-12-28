@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"aqualog/manual"
+	"aqualog/core/manual"
 	"fmt"
 
 	"github.com/spf13/cobra"
