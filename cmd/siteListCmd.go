@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/site"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -22,31 +23,13 @@ var siteListCmd = &cobra.Command{
 			return
 		}
 
-		// Open database
-		database, err := db.GetDB()
+		// List sites
+		err = site.ListSites(projectID)
 		if err != nil {
-			fmt.Println("Database error:", err)
+			fmt.Println("Error listing sites:", err)
 			return
 		}
-		defer database.Close()
 
-		// Query projects
-		rows, err := database.Query(`SELECT id, name, latitude, longitude FROM sites WHERE project_id=? ORDER by id`, projectID)
-		if err != nil {
-			fmt.Println("Failed to query sites:", err)
-			return
-		}
-		defer rows.Close()
-
-		fmt.Println("Sites for project:")
-		for rows.Next() {
-			var id int
-			var name string
-			var lat, lon float64
-			rows.Scan(&id, &name, &lat, &lon)
-
-			fmt.Printf(" %d. %s (%.6f, %.6f)\n", id, name, lat, lon)
-		}
 	},
 }
 

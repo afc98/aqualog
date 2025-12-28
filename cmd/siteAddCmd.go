@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/site"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -25,29 +26,18 @@ var siteAddCmd = &cobra.Command{
 		lat, _ := cmd.Flags().GetFloat64("lat")
 		lon, _ := cmd.Flags().GetFloat64("lon")
 
-		database, err := db.GetDB()
+		// Add site
+		err = site.AddSite(projectID, name, lat, lon)
 		if err != nil {
-			fmt.Println("Database error:", err)
+			fmt.Println("Error adding site:", err)
 			return
 		}
-		defer database.Close()
-
-		_, err = database.Exec(
-			`INSERT INTO sites (project_id, name, latitude, longitude) VALUES (?, ?, ?, ?)`,
-			projectID, name, lat, lon,
-		)
-		if err != nil {
-			fmt.Println("Failed to add site:", err)
-			return
-		}
-
-		fmt.Println("Site added:", name)
 	},
 }
 
 func init() {
 	siteCmd.AddCommand(siteAddCmd)
-	
+
 	siteAddCmd.Flags().StringP("project", "p", "", "Project ID or name")
 	siteAddCmd.Flags().StringP("name", "n", "", "Name of the site")
 	siteAddCmd.Flags().Float64P("lat", "y", 0, "Latitude of the site")
