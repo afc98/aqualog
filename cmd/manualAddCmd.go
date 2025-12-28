@@ -39,7 +39,7 @@ func init() {
 
 	manualAddCmd.MarkFlagRequired("site")
 	manualAddCmd.MarkFlagRequired("waterlevel")
-	manualAddCmd.MarkFlagRequired("timestamp")
+	manualAddCmd.MarkFlagRequired("time")
 
 	manualCmd.AddCommand(manualAddCmd)
 }
