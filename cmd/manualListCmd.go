@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/manual"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -18,33 +19,11 @@ var manualListCmd = &cobra.Command{
 			return
 		}
 
-		// Open database
-		database, err := db.GetDB()
+		// List manual readings
+		err = manual.ListManualReadings(siteID)
 		if err != nil {
-			fmt.Println("Database error:", err)
+			fmt.Println("Error listing manual readings:", err)
 			return
-		}
-		defer database.Close()
-
-		// Query projects
-		rows, err := database.Query(`
-		SELECT id, site_id, timestamp, value, notes 
-		FROM manual_readings WHERE site_id=?
-		ORDER BY id
-		`, siteID)
-		if err != nil {
-			fmt.Println("Failed to query manual readings:", err)
-			return
-		}
-		defer rows.Close()
-
-		fmt.Println("Manual readings for site:")
-		for rows.Next() {
-			var id int
-			var site, time, value, notes string
-			rows.Scan(&id, &site, &time, &value, &notes)
-
-			fmt.Printf(" %d. %s (time: %s, value: %s) notes: %s\n", id, site, time, value, notes)
 		}
 	},
 }

@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/manual"
 	"fmt"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -22,30 +22,12 @@ var manualAddCmd = &cobra.Command{
 		timestamp, _ := cmd.Flags().GetString("time")
 		notes, _ := cmd.Flags().GetString("notes")
 
-		// Parse and validate timestamp
-		parsedTime, err := time.Parse("20060102 15:04:05", timestamp)
-		if err != nil {
-			fmt.Println("Invalid timestamp format. Use: YYYYMMDD HH:MM:SS")
-			return
-		}
-
-		// Open database
-		database, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
-			return
-		}
-		defer database.Close()
-
-		_, err = database.Exec(`
-		INSERT INTO manual_readings (site_id, timestamp, value, notes)
-		VALUES (?, ?, ?, ?)
-		`, siteID, parsedTime, waterLevel, notes)
+		// Add manual reading
+		err = manual.AddManualReading(siteID, waterLevel, timestamp, notes)
 		if err != nil {
 			fmt.Println("Error adding manual reading:", err)
 			return
 		}
-		fmt.Println("Manual reading added")
 	},
 }
 
@@ -54,7 +36,7 @@ func init() {
 	manualAddCmd.Flags().Float64P("waterlevel", "w", 0, "Water level")
 	manualAddCmd.Flags().StringP("time", "T", "", "Timestamp")
 	manualAddCmd.Flags().StringP("notes", "N", "", "Notes")
-	
+
 	manualAddCmd.MarkFlagRequired("site")
 	manualAddCmd.MarkFlagRequired("waterlevel")
 	manualAddCmd.MarkFlagRequired("timestamp")
