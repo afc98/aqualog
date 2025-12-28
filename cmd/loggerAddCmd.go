@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/logger"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -26,25 +27,12 @@ var loggerAddCmd = &cobra.Command{
 		model, _ := cmd.Flags().GetString("model")
 		serial, _ := cmd.Flags().GetString("serial")
 
-		// Open database
-		database, err := db.GetDB()
+		//Add logger
+		err = logger.AddLogger(siteID, name, model, serial)
 		if err != nil {
-			fmt.Println("Database error:", err)
+			fmt.Println("Error adding logger:", err)
 			return
 		}
-		defer database.Close()
-
-		// Insert project
-		_, err = database.Exec(
-			`INSERT INTO loggers (site_id, name, model, serial_number) VALUES (?, ?, ?, ?)`,
-			siteID, name, model, serial,
-		)
-		if err != nil {
-			fmt.Println("Failed to add logger:", err)
-			return
-		}
-
-		fmt.Printf("Logger '%s' added to site %d\n", name, siteID)
 	},
 }
 
@@ -55,7 +43,7 @@ func init() {
 	loggerAddCmd.Flags().StringP("name", "n", "", "Logger name")
 	loggerAddCmd.Flags().StringP("model", "m", "", "Logger model")
 	loggerAddCmd.Flags().StringP("serial", "S", "", "Serial number")
-	
+
 	loggerAddCmd.MarkFlagRequired("site")
 	loggerAddCmd.MarkFlagRequired("name")
 }

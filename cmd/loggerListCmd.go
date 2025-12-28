@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"aqualog/db"
+	"aqualog/logger"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -20,34 +21,14 @@ var loggerListCmd = &cobra.Command{
 			fmt.Println("Site not found:", err)
 			return
 		}
-		// Open database
-		database, err := db.GetDB()
+
+		//List loggers
+		err = logger.ListLoggers(siteID)
 		if err != nil {
-			fmt.Println("Database error:", err)
+			fmt.Println("Error listing loggers:", err)
 			return
 		}
-		defer database.Close()
 
-		// Query projects
-		rows, err := database.Query(`
-		SELECT id, name, model, serial_number 
-		FROM loggers WHERE site_id=?
-		ORDER BY id
-		`, siteID)
-		if err != nil {
-			fmt.Println("Failed to query loggers:", err)
-			return
-		}
-		defer rows.Close()
-
-		fmt.Println("Logger for site:")
-		for rows.Next() {
-			var id int
-			var name, model, serial string
-			rows.Scan(&id, &name, &model, &serial)
-
-			fmt.Printf(" %d. %s (model: %s, serial: %s)\n", id, name, model, serial)
-		}
 	},
 }
 
