@@ -34,47 +34,78 @@ type ExportRow struct {
 }
 
 func ExportData(siteID int, fileName string) error {
+	rows, err := BuildExport(siteID)
+	if err != nil {
+		return err
+	}
+	return WriteCSV(rows, fileName)
+}
 
-	// Open database
+func BuildExport(siteID int) ([]ExportRow, error) {
 	dbConn, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 	defer dbConn.Close()
 
-	// Load data
 	rawRows, err := process.LoadRawData(dbConn, siteID)
 	if err != nil {
-		return fmt.Errorf("load raw data: %w", err)
+		return nil, err
 	}
 
 	measurements, err := process.LoadManualMeasurements(dbConn, siteID)
 	if err != nil {
-		return fmt.Errorf("load manual measurements: %w", err)
+		return nil, err
 	}
 
 	correctedRows, err := loadCorrectedData(dbConn, siteID)
 	if err != nil {
-		return fmt.Errorf("load corrected data: %w", err)
+		return nil, err
 	}
 
 	site, err := db.GetSiteByID(dbConn, siteID)
 	if err != nil {
-		return fmt.Errorf("load site: %w", err)
+		return nil, err
 	}
 
-	// Open output file
+	var out []ExportRow
+
+	for _, row := range correctedRows {
+		manual := manualMeasurementAt(measurements, row.Timestamp)
+
+		name, model, serial, err := loggerAt(dbConn, siteID, row.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, ExportRow{
+			Timestamp:      row.Timestamp.Format(time.RFC3339),
+			SiteName:       site.Name,
+			LoggerName:     name,
+			LoggerModel:    model,
+			LoggerSerial:   serial,
+			Level:          rawValueAt(rawRows, row.Timestamp),
+			ManualReading:  manual,
+			CorrectedLevel: row.Value,
+			SalinityPSU:    row.SalPSU,
+			ECUS:           row.ECUS,
+		})
+	}
+
+	return out, nil
+}
+
+func WriteCSV(rows []ExportRow, fileName string) error {
 	f, err := os.Create(fileName)
 	if err != nil {
-		return fmt.Errorf("create export file: %w", err)
+		return err
 	}
 	defer f.Close()
 
 	w := csv.NewWriter(f)
 	defer w.Flush()
 
-	// Header
-	if err := w.Write([]string{
+	w.Write([]string{
 		"timestamp",
 		"site_name",
 		"logger_name",
@@ -85,51 +116,26 @@ func ExportData(siteID int, fileName string) error {
 		"corrected_level",
 		"salinity_psu",
 		"ec_us",
-	}); err != nil {
-		return fmt.Errorf("write header: %w", err)
-	}
+	})
 
-	// Iterate corrected data as canonical timeline
-	for _, row := range correctedRows {
-		manual := manualMeasurementAt(measurements, row.Timestamp)
-
-		loggerName, loggerModel, loggerSerial, err := loggerAt(dbConn, siteID, row.Timestamp)
-		if err != nil {
-			return fmt.Errorf("resolve logger at %s: %w", row.Timestamp, err)
+	for _, r := range rows {
+		manual := ""
+		if r.ManualReading != nil {
+			manual = fmt.Sprintf("%.4f", *r.ManualReading)
 		}
 
-		export := ExportRow{
-			Timestamp:      row.Timestamp.Format(time.RFC3339),
-			SiteName:       site.Name,
-			LoggerName:     loggerName,
-			LoggerModel:    loggerModel,
-			LoggerSerial:   loggerSerial,
-			Level:          rawValueAt(rawRows, row.Timestamp),
-			ManualReading:  manual,
-			CorrectedLevel: row.Value,
-			SalinityPSU:    row.SalPSU,
-			ECUS:           row.ECUS,
-		}
-
-		manualStr := ""
-		if export.ManualReading != nil {
-			manualStr = fmt.Sprintf("%.4f", *export.ManualReading)
-		}
-
-		if err := w.Write([]string{
-			export.Timestamp,
-			export.SiteName,
-			export.LoggerName,
-			export.LoggerModel,
-			export.LoggerSerial,
-			fmt.Sprintf("%.4f", export.Level),
-			manualStr,
-			fmt.Sprintf("%.4f", export.CorrectedLevel),
-			fmt.Sprintf("%.4f", export.SalinityPSU),
-			fmt.Sprintf("%.4f", export.ECUS),
-		}); err != nil {
-			return fmt.Errorf("write row: %w", err)
-		}
+		w.Write([]string{
+			r.Timestamp,
+			r.SiteName,
+			r.LoggerName,
+			r.LoggerModel,
+			r.LoggerSerial,
+			fmt.Sprintf("%.4f", r.Level),
+			manual,
+			fmt.Sprintf("%.4f", r.CorrectedLevel),
+			fmt.Sprintf("%.4f", r.SalinityPSU),
+			fmt.Sprintf("%.4f", r.ECUS),
+		})
 	}
 
 	return nil
