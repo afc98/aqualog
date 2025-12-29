@@ -2,18 +2,35 @@ package event
 
 import (
 	"aqualog/core/db"
-	"bufio"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 )
 
-// EventAdd adds an event to the logger_events table
-func EventAdd(loggerID int, eventType, timestamp, notes string) error {
+type AddParams struct {
+	LoggerID  int
+	EventType string
+	Timestamp string
+	Notes     string
+}
 
-	// Check that a valid event type is being used
-	eventType = strings.ToLower(eventType)
+type Event struct {
+	ID        int
+	LoggerID  int
+	Timestamp time.Time
+	EventType string
+	Notes     string
+}
+
+type UpdateParams struct {
+	EventType string
+	Timestamp string
+	Notes     string
+}
+
+func Add(p AddParams) (Event, error) {
+	eventType := strings.ToLower(p.EventType)
+
 	validEvents := map[string]struct{}{
 		"installed": {},
 		"moved":     {},
@@ -21,50 +38,60 @@ func EventAdd(loggerID int, eventType, timestamp, notes string) error {
 		"other":     {},
 	}
 
-	// Parse and validate timestamp
-	parsedTime, err := time.Parse("20060102 15:04:05", timestamp)
-	if err != nil {
-		fmt.Println("Invalid timestamp format. Use: YYYYMMDD HH:MM:SS")
-		return err
-	}
-
 	if _, ok := validEvents[eventType]; !ok {
-		fmt.Println("Unsupported event type. Use: installed, moved, removed, other")
-		return fmt.Errorf("unsupported event type: %s", eventType)
+		return Event{}, fmt.Errorf(
+			"unsupported event type: %s (use installed, moved, removed, other)",
+			eventType,
+		)
 	}
 
-	// Open database
+	parsedTime, err := time.Parse("20060102 15:04:05", p.Timestamp)
+	if err != nil {
+		return Event{}, fmt.Errorf(
+			"invalid timestamp format (use YYYYMMDD HH:MM:SS)",
+		)
+	}
+
 	database, err := db.GetDB()
 	if err != nil {
-		fmt.Println("Database error:", err)
-		return err
+		return Event{}, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
-	// Insert event into database
-	_, err = database.Exec(`
+	result, err := database.Exec(`
 		INSERT INTO logger_events (logger_id, timestamp, event_type, notes)
 		VALUES (?, ?, ?, ?)
-		`, loggerID, parsedTime, eventType, notes)
+	`,
+		p.LoggerID,
+		parsedTime,
+		eventType,
+		p.Notes,
+	)
 	if err != nil {
-		fmt.Println("Error adding event:", err)
-		return err
+		return Event{}, fmt.Errorf("error adding event: %w", err)
 	}
 
-	fmt.Println("Event added.")
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Event{}, err
+	}
 
-	return nil
+	return Event{
+		ID:        int(id),
+		LoggerID:  p.LoggerID,
+		Timestamp: parsedTime,
+		EventType: eventType,
+		Notes:     p.Notes,
+	}, nil
 }
 
-func EventList(siteID, loggerID int) error {
-	// Must specify at least one filter
+func List(siteID, loggerID int) ([]Event, error) {
 	if siteID == 0 && loggerID == 0 {
-		return fmt.Errorf("You must specify --site <id/name> and/or --logger <id/name>")
+		return nil, fmt.Errorf("must specify site and/or logger")
 	}
 
-	// Build SQL dynamically
 	query := `
-		SELECT 
+		SELECT
 			e.id,
 			e.logger_id,
 			e.timestamp,
@@ -87,218 +114,152 @@ func EventList(siteID, loggerID int) error {
 
 	query += " ORDER BY e.timestamp"
 
-	// Open DB
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
 	rows, err := database.Query(query, params...)
 	if err != nil {
-		return fmt.Errorf("Failed to query logger events: %w", err)
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
-	if siteID != 0 && loggerID != 0 {
-		fmt.Printf("Logger events for site %d and logger %d:\n", siteID, loggerID)
-	} else if siteID != 0 {
-		fmt.Printf("Logger events for site %d:\n", siteID)
-	} else {
-		fmt.Printf("Logger events for logger %d:\n", loggerID)
-	}
+	events := []Event{}
 
-	found := false
 	for rows.Next() {
-		found = true
-
-		var id int
-		var logID int
-		var timestamp string
-		var eventType string
-		var notes string
-
-		err := rows.Scan(&id, &logID, &timestamp, &eventType, &notes)
-		if err != nil {
-			fmt.Println("Row scan error:", err)
-			continue
+		var e Event
+		if err := rows.Scan(
+			&e.ID,
+			&e.LoggerID,
+			&e.Timestamp,
+			&e.EventType,
+			&e.Notes,
+		); err != nil {
+			return nil, err
 		}
-
-		fmt.Printf(" %d. Logger %d (time: %s, event: %s) notes: %s\n",
-			id, logID, timestamp, eventType, notes)
+		events = append(events, e)
 	}
 
-	if !found {
-		fmt.Println(" No events found.")
-	}
-
-	return nil
+	return events, nil
 }
 
-func EventRemove(id int) error {
-	// Open database connection
+func Delete(id int) error {
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
-	// Fetch the event record
-	var loggerID int
-	var ts time.Time
-	var eventType string
-	var notes string
-
-	err = database.QueryRow(`
-		SELECT logger_id, timestamp, event_type, notes
-		FROM logger_events
-		WHERE id = ?
-	`, id).Scan(&loggerID, &ts, &eventType, &notes)
-
-	if err != nil {
-		return fmt.Errorf("No logger event found with that ID.")
-	}
-
-	// Show details + confirmation prompt
-	fmt.Printf("Are you sure you want to delete logger event %d?\n", id)
-	fmt.Printf("%d. Logger %d (%s, %s) Notes: %s\n",
-		id,
-		loggerID,
-		ts.Format("2006-01-02 15:04:05"),
-		eventType,
-		notes,
-	)
-
-	fmt.Print("Enter Y to confirm: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input != "Y" {
-		return fmt.Errorf("Cancelled.")
-	}
-
-	// Perform delete
 	result, err := database.Exec(`
 		DELETE FROM logger_events
 		WHERE id = ?
 	`, id)
+
 	if err != nil {
-		return fmt.Errorf("Error removing logger event: %w", err)
+		return fmt.Errorf("error removing logger event: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("No logger event removed — unexpected.")
+		return fmt.Errorf("no logger event found with that ID")
 	}
-
-	fmt.Println("Logger event removed.")
 
 	return nil
 }
 
-func EventUpdate(id int, eventType, timestamp, notes string) error {
-	// Normalize event type if provided
-	eventType = strings.ToLower(eventType)
-
-	validEvents := map[string]struct{}{
-		"installed": {},
-		"moved":     {},
-		"removed":   {},
-		"other":     {},
-	}
-
-	// Open DB
+func Get(id int) (Event, error) {
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return Event{}, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
-	// Fetch existing row
-	var loggerID int
-	var existingTS time.Time
-	var existingType string
-	var existingNotes string
+	var e Event
 
 	err = database.QueryRow(`
-		SELECT logger_id, timestamp, event_type, notes
+		SELECT id, logger_id, timestamp, event_type, notes
 		FROM logger_events
 		WHERE id = ?
-	`, id).Scan(&loggerID, &existingTS, &existingType, &existingNotes)
+	`, id).Scan(
+		&e.ID,
+		&e.LoggerID,
+		&e.Timestamp,
+		&e.EventType,
+		&e.Notes,
+	)
 
 	if err != nil {
-		return fmt.Errorf("Logger event not found with that ID.")
+		return Event{}, fmt.Errorf("logger event not found")
 	}
 
-	// Defaults
-	finalTS := existingTS
-	finalType := existingType
-	finalNotes := existingNotes
+	return e, nil
+}
 
-	// Parse timestamp if provided
-	if timestamp != "" {
-		t, err := time.Parse("20060102 15:04:05", timestamp)
+func PrepareUpdate(existing Event, p UpdateParams) (Event, error) {
+	final := existing
+
+	// Timestamp
+	if p.Timestamp != "" {
+		ts, err := time.Parse("20060102 15:04:05", p.Timestamp)
 		if err != nil {
-			return fmt.Errorf("Invalid timestamp. Use: YYYYMMDD HH:MM:SS")
+			return Event{}, fmt.Errorf(
+				"invalid timestamp format (use YYYYMMDD HH:MM:SS)",
+			)
 		}
-		finalTS = t
+		final.Timestamp = ts
 	}
 
-	// Apply event type if provided
-	if eventType != "" {
-		if _, ok := validEvents[eventType]; !ok {
-			return fmt.Errorf("Unsupported event type. Use: installed, moved, removed, other")
+	// Event type
+	if p.EventType != "" {
+		et := strings.ToLower(p.EventType)
+		validEvents := map[string]struct{}{
+			"installed": {},
+			"moved":     {},
+			"removed":   {},
+			"other":     {},
 		}
-		finalType = eventType
+		if _, ok := validEvents[et]; !ok {
+			return Event{}, fmt.Errorf("unsupported event type: %s", et)
+		}
+		final.EventType = et
 	}
 
-	// Apply notes if provided
-	if notes != "" {
-		finalNotes = notes
+	// Notes
+	if p.Notes != "" {
+		final.Notes = p.Notes
 	}
 
-	// Preview before applying
-	fmt.Printf("Are you sure you want to update logger event %d?\n", id)
-	fmt.Printf("Existing: Logger %d (%s, %s) Notes: %s\n",
-		loggerID,
-		existingTS.Format("2006-01-02 15:04:05"),
-		existingType,
-		existingNotes,
-	)
-	fmt.Printf("     New: Logger %d (%s, %s) Notes: %s\n",
-		loggerID,
-		finalTS.Format("2006-01-02 15:04:05"),
-		finalType,
-		finalNotes,
-	)
-	fmt.Print("Enter Y to confirm: ")
+	return final, nil
+}
 
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input != "Y" {
-		return fmt.Errorf("Cancelled.")
+func Update(id int, updated Event) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
 	}
+	defer database.Close()
 
-	// Perform update
 	result, err := database.Exec(`
 		UPDATE logger_events
 		SET timestamp = ?, event_type = ?, notes = ?
 		WHERE id = ?
-	`, finalTS, finalType, finalNotes, id)
+	`,
+		updated.Timestamp,
+		updated.EventType,
+		updated.Notes,
+		id,
+	)
 
 	if err != nil {
-		return fmt.Errorf("Error updating logger event: %w", err)
+		return fmt.Errorf("update failed: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("No logger event updated — unexpected.")
+		return fmt.Errorf("no event updated")
 	}
 
-	fmt.Println("Logger event updated.")
 	return nil
 }

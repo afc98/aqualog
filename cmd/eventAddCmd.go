@@ -22,12 +22,24 @@ var eventAddCmd = &cobra.Command{
 		timestamp, _ := cmd.Flags().GetString("time")
 		notes, _ := cmd.Flags().GetString("notes")
 
-		err = event.EventAdd(loggerID, eventType, timestamp, notes)
+		evt, err := event.Add(event.AddParams{
+			LoggerID:  loggerID,
+			EventType: eventType,
+			Timestamp: timestamp,
+			Notes:     notes,
+		})
 		if err != nil {
-			fmt.Printf("Failed to add event for logger %d, %w", loggerID, err)
+			fmt.Println("Failed to add event:", err)
 			return
 		}
-		fmt.Println("Successfully added event for logger", loggerID)
+
+		fmt.Printf(
+			"Event added: ID %d (logger %d, %s, %s)\n",
+			evt.ID,
+			evt.LoggerID,
+			evt.Timestamp.Format("2006-01-02 15:04:05"),
+			evt.EventType,
+		)
 	},
 }
 
