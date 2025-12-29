@@ -22,13 +22,28 @@ var loggerListCmd = &cobra.Command{
 			return
 		}
 
-		//List loggers
-		err = logger.ListLoggers(siteID)
+		loggers, err := logger.List(siteID)
 		if err != nil {
-			fmt.Println("Error listing loggers:", err)
+			fmt.Println("Failed to list loggers:", err)
 			return
 		}
 
+		if len(loggers) == 0 {
+			fmt.Println("No loggers found.")
+			return
+		} else {
+			fmt.Printf("Loggers for site %d:\n", siteID)
+		}
+
+		for _, l := range loggers {
+			fmt.Printf(
+				" %d. %s (model: %s, serial: %s)\n",
+				l.ID,
+				l.Name,
+				l.Model,
+				l.Serial,
+			)
+		}
 	},
 }
 

@@ -5,57 +5,90 @@ import (
 	"fmt"
 )
 
-func AddLogger(siteID int, name, model, serial string) error {
+type AddParams struct {
+	SiteID int
+	Name   string
+	Model  string
+	Serial string
+}
 
+type Logger struct {
+	ID     int
+	SiteID int
+	Name   string
+	Model  string
+	Serial string
+}
+
+func Add(p AddParams) (Logger, error) {
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return Logger{}, fmt.Errorf("Database error: %w", err)
 	}
 	defer database.Close()
 
-	// Insert project
-	_, err = database.Exec(
+	// Insert logger
+	result, err := database.Exec(
 		`INSERT INTO loggers (site_id, name, model, serial_number) VALUES (?, ?, ?, ?)`,
-		siteID, name, model, serial,
+		p.SiteID, p.Name, p.Model, p.Serial,
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to add logger: %w", err)
+		return Logger{}, fmt.Errorf("Failed to add logger: %w", err)
 	}
 
-	fmt.Printf("Logger '%s' added to site %d\n", name, siteID)
-	return nil
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Logger{}, err
+	}
+
+	return Logger{
+		ID:     int(id),
+		SiteID: p.SiteID,
+		Name:   p.Name,
+		Model:  p.Model,
+		Serial: p.Serial,
+	}, nil
 }
 
-func ListLoggers(siteID int) error {
+func List(SiteID int) ([]Logger, error) {
+	if SiteID == 0 {
+		return nil, fmt.Errorf("must specify site")
+	}
 
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
 	// Query projects
 	rows, err := database.Query(`
-	SELECT id, name, model, serial_number 
+	SELECT id, site_id, name, model, serial_number 
 	FROM loggers WHERE site_id=?
 	ORDER BY id
-	`, siteID)
+	`, SiteID)
 	if err != nil {
-		return fmt.Errorf("Failed to query loggers: %w", err)
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
-	fmt.Println("Logger for site:")
-	for rows.Next() {
-		var id int
-		var name, model, serial string
-		rows.Scan(&id, &name, &model, &serial)
+	loggers := []Logger{}
 
-		fmt.Printf(" %d. %s (model: %s, serial: %s)\n", id, name, model, serial)
+	for rows.Next() {
+		var l Logger
+		if err := rows.Scan(
+			&l.ID,
+			&l.SiteID,
+			&l.Name,
+			&l.Model,
+			&l.Serial,
+		); err != nil {
+			return nil, err
+		}
+		loggers = append(loggers, l)
 	}
 
-	return nil
-
+	return loggers, nil
 }

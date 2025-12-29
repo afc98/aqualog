@@ -27,12 +27,25 @@ var loggerAddCmd = &cobra.Command{
 		model, _ := cmd.Flags().GetString("model")
 		serial, _ := cmd.Flags().GetString("serial")
 
-		//Add logger
-		err = logger.AddLogger(siteID, name, model, serial)
+		lgr, err := logger.Add(logger.AddParams{
+			SiteID: siteID,
+			Name:   name,
+			Model:  model,
+			Serial: serial,
+		})
 		if err != nil {
-			fmt.Println("Error adding logger:", err)
+			fmt.Println("Failed to add logger:", err)
 			return
 		}
+
+		fmt.Printf(
+			"Logger added: ID %d (site %d, %s, %s, %s)\n",
+			lgr.ID,
+			lgr.SiteID,
+			lgr.Name,
+			lgr.Model,
+			lgr.Serial,
+		)
 	},
 }
 
