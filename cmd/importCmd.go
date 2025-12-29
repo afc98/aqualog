@@ -28,11 +28,24 @@ var loggerImportCmd = &cobra.Command{
 			return
 		}
 
-		err = importer.ImportLoggerFile(fileType, filePath, siteID, loggerID)
+		meta, recs, err := importer.ParseLoggerFile(fileType, filePath)
+		if err != nil {
+			fmt.Println("Failed to parse logger file:", err)
+			return
+		}
+
+		result, err := importer.ImportRecords(meta, recs, siteID, loggerID)
 		if err != nil {
 			fmt.Println("Import failed:", err)
 			return
 		}
+
+		fmt.Printf(
+			"Imported %d records (%d skipped). Logger ID: %d\n",
+			result.Inserted,
+			result.Skipped,
+			result.LoggerID,
+		)
 	},
 }
 
