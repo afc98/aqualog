@@ -50,7 +50,6 @@ func Add(p AddParams) (Project, error) {
 		Description: p.Description,
 		CreatedAt:   time.Now(),
 	}, nil
-
 }
 
 func List() error {

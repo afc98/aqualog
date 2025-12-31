@@ -27,11 +27,25 @@ var siteAddCmd = &cobra.Command{
 		lon, _ := cmd.Flags().GetFloat64("lon")
 
 		// Add site
-		err = site.AddSite(projectID, name, lat, lon)
+		newSite, err := site.Add(site.AddParams{
+			ProjectID: projectID,
+			Name:      name,
+			Latitude:  lat,
+			Longitude: lon,
+		})
 		if err != nil {
-			fmt.Println("Error adding site:", err)
+			fmt.Println("Failed to add site:", err)
 			return
 		}
+
+		fmt.Printf(
+			"Site added: ID %d, Project ID: %d, Name: %s, Latitude: %f, Longitude: %f\n",
+			newSite.ID,
+			newSite.ProjectID,
+			newSite.Name,
+			newSite.Latitude,
+			newSite.Longitude,
+		)
 	},
 }
 

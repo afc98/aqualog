@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// projectListCmd represents the projectList command
 var siteListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List existing sites",
@@ -24,12 +23,27 @@ var siteListCmd = &cobra.Command{
 		}
 
 		// List sites
-		err = site.ListSites(projectID)
+		sites, err := site.List(projectID)
 		if err != nil {
 			fmt.Println("Error listing sites:", err)
 			return
 		}
 
+		fmt.Printf("Sites for project %d:\n", projectID)
+		if len(sites) == 0 {
+			fmt.Println(" No sites found.")
+			return
+		}
+
+		for _, s := range sites {
+			fmt.Printf(
+				" %d. Name: %s, Latitude: %.6f, Longitude: %.6f\n",
+				s.ID,
+				s.Name,
+				s.Latitude,
+				s.Longitude,
+			)
+		}
 	},
 }
 
