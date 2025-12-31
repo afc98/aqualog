@@ -21,12 +21,22 @@ var projectAddCmd = &cobra.Command{
 		desc, _ := cmd.Flags().GetString("description")
 
 		// Add project
-		err := project.AddProject(name, desc)
+		proj, err := project.Add(project.AddParams{
+			Name:        name,
+			Description: desc,
+		})
 		if err != nil {
-			fmt.Println("Error adding project:", err)
+			fmt.Println("Failed to add project:", err)
 			return
 		}
 
+		fmt.Printf(
+			"Project added: ID %d, Name: %s, Notes: %s, Created At: %s\n",
+			proj.ID,
+			proj.Name,
+			proj.Description,
+			proj.CreatedAt.Format("2006-01-02 15:04:05"),
+		)
 	},
 }
 

@@ -16,7 +16,8 @@ var projectListCmd = &cobra.Command{
 	Short: "List existing projects",
 	Long:  `Lists existing projects`,
 	Run: func(cmd *cobra.Command, args []string) {
-		err := project.ListProjects()
+
+		err := project.List()
 		if err != nil {
 			fmt.Println("Error listing projects:", err)
 			return

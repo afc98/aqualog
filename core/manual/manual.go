@@ -80,7 +80,7 @@ func List(siteID int) ([]ManualReading, error) {
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return nil, fmt.Errorf("Database error: %w", err)
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
@@ -91,7 +91,7 @@ func List(siteID int) ([]ManualReading, error) {
 	ORDER BY id
 	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to query manual readings: %w", err)
+		return nil, fmt.Errorf("failed to query manual readings: %w", err)
 	}
 	defer rows.Close()
 

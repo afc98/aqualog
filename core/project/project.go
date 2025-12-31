@@ -3,42 +3,68 @@ package project
 import (
 	"aqualog/core/db"
 	"fmt"
+	"time"
 )
 
-func AddProject(name string, description string) error {
-	// Open database
-	database, err := db.GetDB()
-	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
-	}
-	defer database.Close()
-
-	// Insert project
-	_, err = database.Exec(
-		`INSERT INTO projects (name, description) VALUES (?, ?)`,
-		name, description,
-	)
-	if err != nil {
-		return fmt.Errorf("Failed to create project: %w", err)
-	}
-
-	fmt.Println("Project created:", name)
-	return nil
+type AddParams struct {
+	Name        string
+	Description string
 }
 
-func ListProjects() error {
+type Project struct {
+	ID          int
+	Name        string
+	Description string
+	CreatedAt   time.Time
+}
+
+func Add(p AddParams) (Project, error) {
 
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return Project{}, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
+
+	// Insert project
+	result, err := database.Exec(`
+	INSERT INTO projects (name, description)
+	VALUES (?, ?)
+	`,
+		p.Name,
+		p.Description,
+	)
+	if err != nil {
+		return Project{}, fmt.Errorf("error adding project: %w", err)
+	}
+
+	// Get id of new project
+	id, err := result.LastInsertId()
+	if err != nil {
+		return Project{}, fmt.Errorf("error getting last insert ID: %w", err)
+	}
+
+	return Project{
+		ID:          int(id),
+		Name:        p.Name,
+		Description: p.Description,
+		CreatedAt:   time.Now(),
+	}, nil
+
+}
+
+func List() error {
+
+	// Open database
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
 
 	// Query projects
 	rows, err := database.Query(`SELECT id, name, description, created_at FROM  projects`)
 	if err != nil {
-		return fmt.Errorf("Failed to query projects: %w", err)
+		return fmt.Errorf("failed to query projects: %w", err)
 	}
 	defer rows.Close()
 
