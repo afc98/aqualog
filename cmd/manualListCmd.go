@@ -20,10 +20,28 @@ var manualListCmd = &cobra.Command{
 		}
 
 		// List manual readings
-		err = manual.ListManualReadings(siteID)
+		mans, err := manual.List(siteID)
 		if err != nil {
-			fmt.Println("Error listing manual readings:", err)
+			fmt.Println("Error retrieving manual readings:", err)
 			return
+		}
+
+		if siteID != 0 {
+			fmt.Printf("Manual readings for site %d:\n", siteID)
+		} else {
+			fmt.Println(" No manual readings found.")
+			return
+		}
+
+		for _, m := range mans {
+			fmt.Printf(
+				" %d. Site %d (time: %s, water level: %.2f) notes: %s\n",
+				m.ID,
+				m.SiteID,
+				m.Timestamp.Format("2006-01-02 15:04:05"),
+				m.WaterLevel,
+				m.Notes,
+			)
 		}
 	},
 }

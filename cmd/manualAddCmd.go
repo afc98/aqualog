@@ -23,11 +23,23 @@ var manualAddCmd = &cobra.Command{
 		notes, _ := cmd.Flags().GetString("notes")
 
 		// Add manual reading
-		err = manual.AddManualReading(siteID, waterLevel, timestamp, notes)
+		man, err := manual.Add(manual.AddParams{
+			SiteID:     siteID,
+			WaterLevel: waterLevel,
+			Timestamp:  timestamp,
+			Notes:      notes,
+		})
 		if err != nil {
-			fmt.Println("Error adding manual reading:", err)
+			fmt.Println("Failed to add manual reading:", err)
 			return
 		}
+
+		fmt.Printf(
+			"Manual reading added: ID %d (site %d, %s)\n",
+			man.ID,
+			man.SiteID,
+			man.Timestamp.Format("2006-01-02 15:04:05"),
+		)
 	},
 }
 

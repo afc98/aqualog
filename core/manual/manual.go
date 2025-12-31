@@ -2,44 +2,85 @@ package manual
 
 import (
 	"aqualog/core/db"
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 )
 
-func AddManualReading(siteID int, waterLevel float64, timestamp, notes string) error {
+type AddParams struct {
+	SiteID     int
+	WaterLevel float64
+	Timestamp  string
+	Notes      string
+}
+
+type ManualReading struct {
+	ID         int
+	SiteID     int
+	WaterLevel float64
+	Timestamp  time.Time
+	Notes      string
+}
+
+type UpdateParams struct {
+	Timestamp  string
+	WaterLevel float64
+	Notes      string
+}
+
+func Add(p AddParams) (ManualReading, error) {
+
+	// Parse string timestamp
+	parsedTime, err := time.Parse("20060102 15:04:05", p.Timestamp)
+	if err != nil {
+		return ManualReading{}, fmt.Errorf(
+			"invalid timestamp format (use YYYYMMDD HH:MM:SS)",
+		)
+	}
+
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return ManualReading{}, fmt.Errorf("Database error: %w", err)
 	}
 	defer database.Close()
 
-	// Parse timestamp
-	parsedTime, err := time.Parse("20060102 15:04:05", timestamp)
-	if err != nil {
-		return fmt.Errorf("Invalid timestamp format. Use: YYYYMMDD HH:MM:SS")
-	}
 	// Insert manual reading
-	_, err = database.Exec(`
+	result, err := database.Exec(`
 	INSERT INTO manual_readings (site_id, timestamp, value, notes)
 	VALUES (?, ?, ?, ?)
-	`, siteID, parsedTime, waterLevel, notes)
+	`,
+		p.SiteID,
+		parsedTime,
+		p.WaterLevel,
+		p.Notes,
+	)
 	if err != nil {
-		return fmt.Errorf("Error adding manual reading: %w", err)
+		return ManualReading{}, fmt.Errorf("error adding manual reading: %w", err)
 	}
-	fmt.Println("Manual reading added")
-	return nil
+
+	// Get id of new manual reading
+	id, err := result.LastInsertId()
+	if err != nil {
+		return ManualReading{}, err
+	}
+
+	return ManualReading{
+		ID:        int(id),
+		SiteID:    p.SiteID,
+		Timestamp: parsedTime,
+		Notes:     p.Notes,
+	}, nil
 }
 
-func ListManualReadings(siteID int) error {
+func List(siteID int) ([]ManualReading, error) {
+	if siteID == 0 {
+		return nil, fmt.Errorf("must specify site")
+	}
 
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return nil, fmt.Errorf("Database error: %w", err)
 	}
 	defer database.Close()
 
@@ -50,79 +91,109 @@ func ListManualReadings(siteID int) error {
 	ORDER BY id
 	`, siteID)
 	if err != nil {
-		return fmt.Errorf("Failed to query manual readings: %w", err)
+		return nil, fmt.Errorf("Failed to query manual readings: %w", err)
 	}
 	defer rows.Close()
 
-	fmt.Println("Manual readings for site:")
-	for rows.Next() {
-		var id int
-		var site, time, value, notes string
-		rows.Scan(&id, &site, &time, &value, &notes)
+	manual_readings := []ManualReading{}
 
-		fmt.Printf(" %d. %s (time: %s, value: %s) notes: %s\n", id, site, time, value, notes)
+	for rows.Next() {
+		var m ManualReading
+		if err := rows.Scan(
+			&m.ID,
+			&m.SiteID,
+			&m.Timestamp,
+			&m.WaterLevel,
+			&m.Notes,
+		); err != nil {
+			return nil, err
+		}
+		manual_readings = append(manual_readings, m)
 	}
-	return nil
+
+	return manual_readings, nil
 }
 
-func RemoveManualReading(id int) error {
-
-	// Open database
+func Delete(id int) error {
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("Database error: %w", err)
+		return fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
-	// Fetch the manual reading so we can display it
-	var siteID int
-	var ts time.Time
-	var value float64
-	var notes string
-
-	err = database.QueryRow(`
-		SELECT site_id, timestamp, value, notes
-		FROM manual_readings
-		WHERE id = ?
-	`, id).Scan(&siteID, &ts, &value, &notes)
-
-	if err != nil {
-		return fmt.Errorf("Manual reading not found with that ID.")
-	}
-
-	// Show details and request confirmation
-	fmt.Printf("Are you sure you want to delete manual reading %d?\n", id)
-	fmt.Printf("%d. Site %d (%s, %.3f) Notes: %s\n",
-		id, siteID, ts.Format("2006-01-02 15:04:05"), value, notes)
-	fmt.Print("Enter Y to confirm: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input != "Y" {
-		return fmt.Errorf("Cancelled.")
-	}
-
-	// Perform delete
 	result, err := database.Exec(`
 		DELETE FROM manual_readings
 		WHERE id = ?
 	`, id)
+
 	if err != nil {
-		return fmt.Errorf("Error removing manual reading: %w", err)
+		return fmt.Errorf("error removing manual reading: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("No manual reading removed — unexpected.")
+		return fmt.Errorf("no manual reading with that ID")
 	}
 
-	fmt.Println("Manual reading removed.")
 	return nil
 }
 
-func UpdateManualReading(id int, tsString string, newWaterLevel float64, newNotes string) error {
+func Get(id int) (ManualReading, error) {
+	database, err := db.GetDB()
+	if err != nil {
+		return ManualReading{}, fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+
+	var m ManualReading
+
+	err = database.QueryRow(`
+		SELECT id, site_id, timestamp, value, notes
+		FROM manual_readings
+		WHERE id = ?
+	`, id).Scan(
+		&m.ID,
+		&m.SiteID,
+		&m.Timestamp,
+		&m.WaterLevel,
+		&m.Notes,
+	)
+
+	if err != nil {
+		return ManualReading{}, fmt.Errorf("manual reading not found")
+	}
+
+	return m, nil
+}
+
+func PrepareUpdate(existing ManualReading, p UpdateParams) (ManualReading, error) {
+	final := existing
+
+	// Timestamp
+	if p.Timestamp != "" {
+		ts, err := time.Parse("20060102 15:04:05", p.Timestamp)
+		if err != nil {
+			return ManualReading{}, fmt.Errorf(
+				"invalid timestamp format (use YYYYMMDD HH:MM:SS)",
+			)
+		}
+		final.Timestamp = ts
+	}
+
+	// Water Level
+	if p.WaterLevel != -1 {
+		final.WaterLevel = p.WaterLevel
+	}
+
+	// Notes
+	if p.Notes != "" {
+		final.Notes = p.Notes
+	}
+
+	return final, nil
+}
+
+func Update(id int, updated ManualReading) error {
 
 	// Open DB
 	database, err := db.GetDB()
@@ -131,76 +202,25 @@ func UpdateManualReading(id int, tsString string, newWaterLevel float64, newNote
 	}
 	defer database.Close()
 
-	// Fetch existing row
-	var siteID int
-	var existingTS time.Time
-	var existingValue float64
-	var existingNotes string
-
-	err = database.QueryRow(`
-		SELECT site_id, timestamp, value, notes
-		FROM manual_readings
-		WHERE id = ?
-	`, id).Scan(&siteID, &existingTS, &existingValue, &existingNotes)
-	if err != nil {
-		return fmt.Errorf("Manual reading not found with that ID.")
-	}
-
-	// Apply defaults BEFORE preview
-	finalTS := existingTS
-	finalValue := existingValue
-	finalNotes := existingNotes
-
-	// Parse timestamp if provided
-	if tsString != "" {
-		t, err := time.Parse("20060102 15:04:05", tsString)
-		if err != nil {
-			return fmt.Errorf("Invalid timestamp format. Use: YYYYMMDD HH:MM:SS")
-		}
-		finalTS = t
-	}
-
-	// Apply water level unless -1
-	if newWaterLevel != -1 {
-		finalValue = newWaterLevel
-	}
-
-	if newNotes != "" {
-		finalNotes = newNotes
-	}
-
-	// Preview
-	fmt.Printf("Are you sure you want to update manual reading %d?\n", id)
-	fmt.Printf("Existing: %d. Site %d (%s, %.3f) Notes: %s\n",
-		id, siteID, existingTS.Format("2006-01-02 15:04:05"), existingValue, existingNotes)
-	fmt.Printf("     New: %d. Site %d (%s, %.3f) Notes: %s\n",
-		id, siteID, finalTS.Format("2006-01-02 15:04:05"), finalValue, finalNotes)
-	fmt.Print("Enter Y to confirm: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input != "Y" {
-		return fmt.Errorf("Cancelled.")
-	}
-
-	// Perform update
 	result, err := database.Exec(`
 		UPDATE manual_readings
 		SET timestamp = ?, value = ?, notes = ?
 		WHERE id = ?
-	`, finalTS, finalValue, finalNotes, id)
+	;`,
+		updated.Timestamp,
+		updated.WaterLevel,
+		updated.Notes,
+		id,
+	)
 
 	if err != nil {
-		return fmt.Errorf("Error updating manual reading: %w", err)
+		return fmt.Errorf("update failed: %w", err)
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		return fmt.Errorf("No manual reading updated — unexpected.")
+		return fmt.Errorf("no manual reading updated")
 	}
 
-	fmt.Println("Manual reading updated.")
 	return nil
 }

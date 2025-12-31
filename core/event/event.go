@@ -45,6 +45,7 @@ func Add(p AddParams) (Event, error) {
 		)
 	}
 
+	// Parse string timestamp
 	parsedTime, err := time.Parse("20060102 15:04:05", p.Timestamp)
 	if err != nil {
 		return Event{}, fmt.Errorf(
@@ -52,12 +53,14 @@ func Add(p AddParams) (Event, error) {
 		)
 	}
 
+	// Open database
 	database, err := db.GetDB()
 	if err != nil {
 		return Event{}, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
+	// Insert event
 	result, err := database.Exec(`
 		INSERT INTO logger_events (logger_id, timestamp, event_type, notes)
 		VALUES (?, ?, ?, ?)
@@ -71,6 +74,7 @@ func Add(p AddParams) (Event, error) {
 		return Event{}, fmt.Errorf("error adding event: %w", err)
 	}
 
+	// Get id of new event
 	id, err := result.LastInsertId()
 	if err != nil {
 		return Event{}, err
@@ -235,6 +239,8 @@ func PrepareUpdate(existing Event, p UpdateParams) (Event, error) {
 }
 
 func Update(id int, updated Event) error {
+
+	// Open DB
 	database, err := db.GetDB()
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)

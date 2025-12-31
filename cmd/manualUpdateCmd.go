@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"aqualog/core/manual"
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -17,12 +20,55 @@ var manualUpdateCmd = &cobra.Command{
 		newNotes, _ := cmd.Flags().GetString("notes")
 
 		// Update manual reading
-		err := manual.UpdateManualReading(id, tsString, newWaterLevel, newNotes)
+		existing, err := manual.Get(id)
 		if err != nil {
+			fmt.Println("Error fetching manual reading:", err)
+			return
+		}
+
+		updated, err := manual.PrepareUpdate(existing, manual.UpdateParams{
+			WaterLevel: newWaterLevel,
+			Timestamp:  tsString,
+			Notes:      newNotes,
+		})
+		if err != nil {
+			fmt.Println("Error preparing update:", err)
+			return
+		}
+
+		// Preview
+		fmt.Printf("Are you sure you want to update manual reading %d?\n", id)
+		fmt.Printf(
+			"Existing: Site %d (%s) Water Level: %.2f Notes: %s\n",
+			existing.SiteID,
+			existing.Timestamp.Format("2006-01-02 15:04:05"),
+			existing.WaterLevel,
+			existing.Notes,
+		)
+		fmt.Printf(
+			"     New: Site %d (%s) Water Level: %.2f Notes: %s\n",
+			updated.SiteID,
+			updated.Timestamp.Format("2006-01-02 15:04:05"),
+			updated.WaterLevel,
+			updated.Notes,
+		)
+
+		fmt.Print("Enter Y to confirm: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		if strings.TrimSpace(input) != "Y" {
+			fmt.Println(" Cancelled.")
+			return
+		}
+
+		// Apply once
+		if err := manual.Update(id, updated); err != nil {
 			fmt.Println("Error updating manual reading:", err)
 			return
 		}
 
+		fmt.Println("Manual reading updated.")
 	},
 }
 
