@@ -8,219 +8,257 @@ import (
 )
 
 type LoggerRawRow struct {
-	ID        int
-	LoggerID  int
-	siteID    int
 	Timestamp time.Time
 	RawValue  float64
-	tempC     float64
-	salPSU    float64
-	ecUS      float64
+	TempC     float64
+	SalPSU    float64
+	ECUS      float64
 }
 
 type ManualMeasurement struct {
-	ID        int
-	SiteID    int
 	Timestamp time.Time
-	Level     float64 // water level relative to datum
+	Level     float64
 }
 
 type LoggerEvent struct {
-	ID        int
-	LoggerID  int
-	SiteID    int
-	Type      string
 	Timestamp time.Time
-	Notes     string
+	EventType string
 }
 
 type OffsetSegment struct {
 	Start  time.Time
-	End    time.Time
+	End    *time.Time
 	Offset float64
-	Source string
+}
+
+type CorrectedRow struct {
+	Timestamp time.Time
+	Value     float64
+	TempC     float64
+	SalPSU    float64
+	ECUS      float64
 }
 
 func ProcessLoggerData(db *sql.DB, siteID int) error {
-	// Load all logger_data rows for site
-	rawRows, err := LoadRawData(db, siteID)
+
+	raw, err := LoadRawData(db, siteID)
 	if err != nil {
 		return err
 	}
 
-	// Load manual measurements and logger events
-	measurements, err := LoadManualMeasurements(db, siteID)
+	manual, err := LoadManualMeasurements(db, siteID)
 	if err != nil {
 		return err
 	}
+
 	events, err := LoadLoggerEvents(db, siteID)
 	if err != nil {
 		return err
 	}
 
-	// Build offset segments
-	segments, err := buildOffsetSegments(rawRows, measurements, events)
+	corrected, err := ComputeCorrectedRows(raw, manual, events)
 	if err != nil {
 		return err
 	}
 
-	// Walk through each row
-	for _, row := range rawRows {
-		seg := findSegmentForTime(segments, row.Timestamp)
-		if seg == nil {
-			continue
-		}
-		correctedLevel := row.RawValue + seg.Offset
-		insertCorrectedRow(db, siteID, row.Timestamp, correctedLevel, row.tempC, row.salPSU, row.ecUS)
-	}
-	return nil
+	return StoreCorrectedRows(db, siteID, corrected)
 }
 
 func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
+
 	rows, err := db.Query(`
-		SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
-		FROM logger_data
-		WHERE logger_id IN (
-			SELECT id FROM loggers WHERE site_id=?
-		)
-		ORDER BY timestamp ASC
+		SELECT
+			d.timestamp,
+			d.level_m,
+			d.temp_c,
+			d.sal_psu,
+			d.ec_us
+		FROM logger_data d
+		JOIN loggers l ON l.id = d.logger_id
+		WHERE l.site_id = ?
+		ORDER BY d.timestamp ASC
 	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("query logger_data: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	var out []LoggerRawRow
 
 	for rows.Next() {
-		var row LoggerRawRow
+		var r LoggerRawRow
 		var ts string
 
-		// Allow nullable fields
-		var tempC sql.NullFloat64
-		var salPSU sql.NullFloat64
-		var ecUS sql.NullFloat64
+		var tempC, salPSU, ecUS sql.NullFloat64
 
 		if err := rows.Scan(
-			&row.ID,
-			&row.LoggerID,
 			&ts,
-			&row.RawValue,
+			&r.RawValue,
 			&tempC,
 			&salPSU,
 			&ecUS,
 		); err != nil {
-			return nil, fmt.Errorf("scan logger_data: %w", err)
+			return nil, err
 		}
 
-		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
+		t, err := time.Parse(time.RFC3339, ts)
 		if err != nil {
-			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
+			return nil, err
 		}
-		row.Timestamp = t
 
-		// Convert NullFloat64 -> float64 (use 0 for NULL or choose sentinel)
+		r.Timestamp = t
+
 		if tempC.Valid {
-			row.tempC = tempC.Float64
-		} else {
-			row.tempC = 0
+			r.TempC = tempC.Float64
 		}
-
 		if salPSU.Valid {
-			row.salPSU = salPSU.Float64
-		} else {
-			row.salPSU = 0 // or NaN, or leave as 0
+			r.SalPSU = salPSU.Float64
 		}
-
 		if ecUS.Valid {
-			row.ecUS = ecUS.Float64
-		} else {
-			row.ecUS = 0
+			r.ECUS = ecUS.Float64
 		}
 
-		out = append(out, row)
+		out = append(out, r)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
-	}
-
-	return out, nil
+	return out, rows.Err()
 }
 
 func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error) {
+
 	rows, err := db.Query(`
-	SELECT id, site_id, timestamp, value
-	FROM manual_readings
-	WHERE site_id=?
-	ORDER BY timestamp ASC
+		SELECT
+			m.timestamp,
+			m.value
+		FROM manual_readings m
+		WHERE m.site_id = ?
+		ORDER BY m.timestamp ASC
 	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("query manual_readings: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	var out []ManualMeasurement
 
 	for rows.Next() {
-		var m ManualMeasurement
+		var r ManualMeasurement
 		var ts string
 
-		if err := rows.Scan(&m.ID, &m.SiteID, &ts, &m.Level); err != nil {
-			return nil, fmt.Errorf("scan manual_measurements: %w", err)
+		if err := rows.Scan(&ts, &r.Level); err != nil {
+			return nil, err
 		}
 
-		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
+		t, err := time.Parse(time.RFC3339, ts)
 		if err != nil {
-			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
+			return nil, err
 		}
-		m.Timestamp = t
-		out = append(out, m)
+
+		r.Timestamp = t
+		out = append(out, r)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
-	}
-
-	return out, nil
+	return out, rows.Err()
 }
 
 func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
+
 	rows, err := db.Query(`
-        SELECT id, logger_id, event_type, timestamp, notes
-        FROM logger_events
-        WHERE logger_id IN (
-		SELECT id FROM loggers WHERE site_id=?)
-        ORDER BY timestamp ASC
-    `, siteID)
+		SELECT
+			e.timestamp,
+			e.event_type
+		FROM logger_events e
+		JOIN loggers l ON l.id = e.logger_id
+		WHERE l.site_id = ?
+		ORDER BY e.timestamp ASC
+	`, siteID)
 	if err != nil {
-		return nil, fmt.Errorf("query logger_events: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
-	var events []LoggerEvent
+	var out []LoggerEvent
 
 	for rows.Next() {
 		var e LoggerEvent
 		var ts string
 
-		if err := rows.Scan(&e.ID, &e.LoggerID, &e.Type, &ts, &e.Notes); err != nil {
-			return nil, fmt.Errorf("scan logger_events: %w", err)
+		if err := rows.Scan(&ts, &e.EventType); err != nil {
+			return nil, err
 		}
-		t, err := time.Parse("2006-01-02T15:04:05Z", ts)
+
+		t, err := time.Parse(time.RFC3339, ts)
 		if err != nil {
-			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
+			return nil, err
 		}
+
 		e.Timestamp = t
-
-		events = append(events, e)
+		out = append(out, e)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("row iteration error: %w", err)
+	return out, rows.Err()
+}
+
+func ComputeCorrectedRows(
+	raw []LoggerRawRow,
+	manual []ManualMeasurement,
+	events []LoggerEvent,
+) ([]CorrectedRow, error) {
+
+	if len(manual) == 0 {
+		return nil, fmt.Errorf("no manual measurements available")
 	}
 
-	return events, nil
+	segments, err := buildOffsetSegments(raw, manual, events)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []CorrectedRow
+
+	for _, r := range raw {
+		seg := findSegmentForTime(segments, r.Timestamp)
+		if seg == nil {
+			continue
+		}
+
+		out = append(out, CorrectedRow{
+			Timestamp: r.Timestamp,
+			Value:     r.RawValue + seg.Offset,
+			TempC:     r.TempC,
+			SalPSU:    r.SalPSU,
+			ECUS:      r.ECUS,
+		})
+	}
+
+	return out, nil
+}
+
+func StoreCorrectedRows(
+	db *sql.DB,
+	siteID int,
+	rows []CorrectedRow,
+) error {
+
+	for _, r := range rows {
+		_, err := db.Exec(`
+			INSERT OR REPLACE INTO corrected_data
+			(site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`,
+			siteID,
+			r.Timestamp.Format(time.RFC3339),
+			r.Value,
+			r.TempC,
+			r.SalPSU,
+			r.ECUS,
+		)
+		if err != nil {
+			return fmt.Errorf("insert corrected row at %s: %w", r.Timestamp, err)
+		}
+	}
+
+	return nil
 }
 
 func buildOffsetSegments(
@@ -229,166 +267,59 @@ func buildOffsetSegments(
 	events []LoggerEvent,
 ) ([]OffsetSegment, error) {
 
-	if len(raw) == 0 {
-		return nil, fmt.Errorf("no raw data available")
-	}
-
-	// Helper: find the last raw row at or before ts
-	getRawAt := func(ts time.Time) *LoggerRawRow {
-		var prev *LoggerRawRow
-		for i := range raw {
-			if raw[i].Timestamp.After(ts) {
-				return prev
-			}
-			prev = &raw[i]
-		}
-		return prev
-	}
-
-	// Merge events and manual readings into a single chronological list
-	type marker struct {
-		Time   time.Time
-		Kind   string // "event" or "manual"
-		Event  *LoggerEvent
-		Manual *ManualMeasurement
-	}
-
-	var markers []marker
-	for i := range events {
-		markers = append(markers, marker{
-			Time:  events[i].Timestamp,
-			Kind:  "event",
-			Event: &events[i],
-		})
-	}
-	for i := range manual {
-		markers = append(markers, marker{
-			Time:   manual[i].Timestamp,
-			Kind:   "manual",
-			Manual: &manual[i],
-		})
-	}
-
-	sort.Slice(markers, func(i, j int) bool {
-		return markers[i].Time.Before(markers[j].Time)
+	sort.Slice(manual, func(i, j int) bool {
+		return manual[i].Timestamp.Before(manual[j].Timestamp)
 	})
 
 	var segments []OffsetSegment
-	var currentStart time.Time
-	var currentOffset float64
-	var haveOffset bool
-	loggerActive := false
 
-	for _, m := range markers {
+	for i, m := range manual {
 
-		switch m.Kind {
-		case "event":
-			switch m.Event.Type {
-
-			case "installed":
-				// Close previous segment if logger was active
-				if loggerActive && haveOffset {
-					segments = append(segments, OffsetSegment{
-						Start:  currentStart,
-						End:    m.Time,
-						Offset: currentOffset,
-						Source: "before_reinstall",
-					})
-				}
-
-				// Logger is now active
-				loggerActive = true
-				currentStart = m.Time
-				// Keep the current offset if we have one (for reinstallations)
-				// It will be updated by the next manual reading if one exists
-
-			case "moved":
-				if loggerActive && haveOffset {
-					segments = append(segments, OffsetSegment{
-						Start:  currentStart,
-						End:    m.Time,
-						Offset: currentOffset,
-						Source: "before_move",
-					})
-				}
-				currentStart = m.Time
-				haveOffset = false
-
-			case "removed":
-				if loggerActive && haveOffset {
-					segments = append(segments, OffsetSegment{
-						Start:  currentStart,
-						End:    m.Time,
-						Offset: currentOffset,
-						Source: "before_removal",
-					})
-				}
-				loggerActive = false
-				// Keep haveOffset true so we can reuse the offset if reinstalled
-				// without a new manual reading
-			}
-
-		case "manual":
-			// Close current segment if we have one
-			if loggerActive && haveOffset && !m.Time.Equal(currentStart) {
-				segments = append(segments, OffsetSegment{
-					Start:  currentStart,
-					End:    m.Time,
-					Offset: currentOffset,
-					Source: "before_manual",
-				})
-			}
-
-			// Calculate new offset from manual measurement
-			if r := getRawAt(m.Time); r != nil {
-				currentOffset = m.Manual.Level - r.RawValue
-				haveOffset = true
-				currentStart = m.Time
-			}
+		rawVal, ok := rawValueAt(raw, m.Timestamp)
+		if !ok {
+			continue
 		}
-	}
 
-	// If logger is still active at the end, close final segment up to last raw row
-	if loggerActive && haveOffset {
-		segments = append(segments, OffsetSegment{
-			Start:  currentStart,
-			End:    raw[len(raw)-1].Timestamp,
-			Offset: currentOffset,
-			Source: "final",
-		})
+		offset := m.Level - rawVal
+
+		seg := OffsetSegment{
+			Start:  m.Timestamp,
+			Offset: offset,
+		}
+
+		if i+1 < len(manual) {
+			end := manual[i+1].Timestamp
+			seg.End = &end
+		}
+
+		segments = append(segments, seg)
 	}
 
 	return segments, nil
 }
 
-func findSegmentForTime(segments []OffsetSegment, ts time.Time) *OffsetSegment {
-	for i := range segments {
-		seg := &segments[i]
+func findSegmentForTime(
+	segments []OffsetSegment,
+	t time.Time,
+) *OffsetSegment {
 
-		// Condition: ts ∈ [Start, End]
-		if (ts.Equal(seg.Start) || ts.After(seg.Start)) &&
-			(ts.Equal(seg.End) || ts.Before(seg.End)) {
-
-			return seg
+	for _, s := range segments {
+		if t.Before(s.Start) {
+			continue
 		}
+		if s.End != nil && !t.Before(*s.End) {
+			continue
+		}
+		return &s
 	}
 	return nil
 }
 
-func insertCorrectedRow(
-	db *sql.DB,
-	siteID int,
-	ts time.Time,
-	correctedLevel float64,
-	tempC float64,
-	salPSU float64,
-	ecUS float64,
-) error {
-
-	_, err := db.Exec(`
-        INSERT OR REPLACE INTO corrected_data (site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `, siteID, ts, correctedLevel, tempC, salPSU, ecUS)
-
-	return err
+func rawValueAt(rows []LoggerRawRow, t time.Time) (float64, bool) {
+	for _, r := range rows {
+		if r.Timestamp.Equal(t) {
+			return r.RawValue, true
+		}
+	}
+	return 0, false
 }
