@@ -52,28 +52,34 @@ func Add(p AddParams) (Project, error) {
 	}, nil
 }
 
-func List() error {
+func List() ([]Project, error) {
 
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return fmt.Errorf("database error: %w", err)
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	// Query projects
 	rows, err := database.Query(`SELECT id, name, description, created_at FROM  projects`)
 	if err != nil {
-		return fmt.Errorf("failed to query projects: %w", err)
+		return nil, fmt.Errorf("failed to query projects: %w", err)
 	}
 	defer rows.Close()
 
-	fmt.Println("Projects:")
+	projects := []Project{}
 	for rows.Next() {
-		var id int
-		var name, desc, created string
-		rows.Scan(&id, &name, &desc, &created)
-
-		fmt.Printf(" %d. %s - %s (created %s)\n", id, name, desc, created)
+		var project Project
+		if err := rows.Scan(
+			&project.ID,
+			&project.Name,
+			&project.Description,
+			&project.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
 	}
-	return nil
+
+	return projects, nil
 }
