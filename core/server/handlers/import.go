@@ -16,19 +16,19 @@ type importRequest struct {
 
 func Import(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req importRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", 400)
+		writeError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
 	meta, recs, err := importer.ParseLoggerFile(req.FileType, req.FilePath)
 	if err != nil {
-		http.Error(w, err.Error(), 400)
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -39,7 +39,7 @@ func Import(w http.ResponseWriter, r *http.Request) {
 		req.LoggerID,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

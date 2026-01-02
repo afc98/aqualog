@@ -17,18 +17,18 @@ func ManualReadings(w http.ResponseWriter, r *http.Request) {
 
 		siteID, err := parseOptionalInt(q.Get("site_id"))
 		if err != nil {
-			http.Error(w, "invalid site_id", http.StatusBadRequest)
+			writeError(w, "invalid site_id", http.StatusBadRequest)
 			return
 		}
 
 		if siteID == 0 {
-			http.Error(w, "site_id is required", http.StatusBadRequest)
+			writeError(w, "site_id is required", http.StatusBadRequest)
 			return
 		}
 
 		readings, err := manual.List(siteID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -37,13 +37,13 @@ func ManualReadings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req manual.AddParams
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			writeError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 
 		reading, err := manual.Add(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -59,7 +59,7 @@ func ManualReadingByID(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/manual/")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		writeError(w, "invalid id", http.StatusBadRequest)
 		return
 	}
 
@@ -68,14 +68,14 @@ func ManualReadingByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		reading, err := manual.Get(id)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			writeError(w, err.Error(), http.StatusNotFound)
 			return
 		}
 		writeJSON(w, reading)
 
 	case http.MethodDelete:
 		if err := manual.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

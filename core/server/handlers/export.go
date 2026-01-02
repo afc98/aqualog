@@ -20,13 +20,13 @@ func Export(w http.ResponseWriter, r *http.Request) {
 
 	var req exportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", 400)
+		writeError(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
 	err := export.ExportData(req.SiteID, req.FilePath)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

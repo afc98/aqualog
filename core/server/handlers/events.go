@@ -17,42 +17,42 @@ func Events(w http.ResponseWriter, r *http.Request) {
 
 		siteID, err := parseOptionalInt(q.Get("site_id"))
 		if err != nil {
-			http.Error(w, "invalid site_id", http.StatusBadRequest)
+			writeError(w, "invalid site_id", http.StatusBadRequest)
 			return
 		}
 
 		loggerID, err := parseOptionalInt(q.Get("logger_id"))
 		if err != nil {
-			http.Error(w, "invalid logger_id", http.StatusBadRequest)
+			writeError(w, "invalid logger_id", http.StatusBadRequest)
 			return
 		}
 
 		events, err := event.List(siteID, loggerID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		writeJSON(w, events)
+		writeSuccess(w, events)
 
 	case http.MethodPost:
 		var req event.AddParams
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			writeError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 
 		ev, err := event.Add(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		writeJSON(w, ev)
+		writeSuccess(w, ev)
 
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -60,7 +60,7 @@ func EventByID(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/events/")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "invalid id", 400)
+		writeError(w, "invalid id", http.StatusBadRequest)
 		return
 	}
 
@@ -69,20 +69,20 @@ func EventByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		ev, err := event.Get(id)
 		if err != nil {
-			http.Error(w, err.Error(), 404)
+			writeError(w, err.Error(), http.StatusNotFound)
 			return
 		}
-		writeJSON(w, ev)
+		writeSuccess(w, ev)
 
 	case http.MethodDelete:
 		if err := event.Delete(id); err != nil {
-			http.Error(w, err.Error(), 400)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
 
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

@@ -15,18 +15,18 @@ func Loggers(w http.ResponseWriter, r *http.Request) {
 
 		siteID, err := parseOptionalInt(q.Get("site_id"))
 		if err != nil {
-			http.Error(w, "invalid site_id", http.StatusBadRequest)
+			writeError(w, "invalid site_id", http.StatusBadRequest)
 			return
 		}
 
 		if siteID == 0 {
-			http.Error(w, "site_id is required", http.StatusBadRequest)
+			writeError(w, "site_id is required", http.StatusBadRequest)
 			return
 		}
 
 		loggers, err := logger.List(siteID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -35,13 +35,13 @@ func Loggers(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req logger.AddParams
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			writeError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 
 		l, err := logger.Add(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

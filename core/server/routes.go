@@ -23,8 +23,8 @@ func Routes() http.Handler {
 	mux.HandleFunc("/manual/", handlers.ManualReadingByID)
 
 	// Events
-	mux.HandleFunc("/events", handlers.Events)
-	mux.HandleFunc("/events/", handlers.EventByID)
+	mux.HandleFunc("/event", handlers.Events)
+	mux.HandleFunc("/event/", handlers.EventByID)
 
 	// Import
 	mux.HandleFunc("/import", handlers.Import)
@@ -34,6 +34,9 @@ func Routes() http.Handler {
 
 	// Export
 	mux.HandleFunc("/export", handlers.Export)
+
+	// Data Query
+	mux.HandleFunc("/data", handlers.Data)
 
 	return mux
 }

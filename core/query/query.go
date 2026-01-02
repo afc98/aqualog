@@ -1,11 +1,40 @@
 package query
 
 import (
+	"aqualog/core/db"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
-func QueryLoggerData(dbConn *sql.DB, siteID int) error {
+type LoggerDataRow struct {
+	ID        int
+	LoggerID  int
+	Timestamp time.Time
+	LevelM    float64
+	TempC     sql.NullFloat64
+	SalPSU    sql.NullFloat64
+	ECUS      sql.NullFloat64
+}
+
+type CorrectedDataRow struct {
+	ID             int
+	SiteID         int
+	Timestamp      time.Time
+	CorrectedValue float64
+	TempC          sql.NullFloat64
+	SalPSU         sql.NullFloat64
+	ECUS           sql.NullFloat64
+}
+
+func QueryLoggerData(siteID int) ([]LoggerDataRow, error) {
+
+	dbConn, err := db.GetDB()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	defer dbConn.Close()
+
 	rows, err := dbConn.Query(`
 	SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
 	FROM logger_data
@@ -15,36 +44,30 @@ func QueryLoggerData(dbConn *sql.DB, siteID int) error {
 	ORDER BY timestamp ASC;
 	`, siteID)
 	if err != nil {
-		return fmt.Errorf("query logger_data: %w", err)
+		return nil, fmt.Errorf("query logger_data: %w", err)
 	}
 	defer rows.Close()
-	fmt.Println("ID, LoggerID, Timestamp, Level(m), Temp(C), Sal(PSU), EC(uS)")
+
+	var loggerData []LoggerDataRow
 	for rows.Next() {
-		// Process each row
-		var id int
-		var loggerID int
-		var timestamp string
-		var levelM float64
-		var tempC sql.NullFloat64
-		var salPSU sql.NullFloat64
-		var ecUS sql.NullFloat64
-
-		if err := rows.Scan(&id, &loggerID, &timestamp, &levelM, &tempC, &salPSU, &ecUS); err != nil {
-			return fmt.Errorf("scan logger_data: %w", err)
+		var row LoggerDataRow
+		if err := rows.Scan(&row.ID, &row.LoggerID, &row.Timestamp, &row.LevelM, &row.TempC, &row.SalPSU, &row.ECUS); err != nil {
+			return nil, fmt.Errorf("scan logger_data: %w", err)
 		}
-
-		// Print data to SDTOUT
-		fmt.Printf("%d, %d, %s, %.2f, %v, %v, %v\n",
-			id, loggerID, timestamp, levelM,
-			NullFloattoString(tempC),
-			NullFloattoString(salPSU),
-			NullFloattoString(ecUS),
-		)
+		loggerData = append(loggerData, row)
 	}
-	return nil
+
+	return loggerData, nil
 }
 
-func QueryCorrectedData(dbConn *sql.DB, siteID int) error {
+func QueryCorrectedData(siteID int) ([]CorrectedDataRow, error) {
+
+	dbConn, err := db.GetDB()
+	if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
+	}
+	defer dbConn.Close()
+
 	rows, err := dbConn.Query(`
 	SELECT id, site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
 	FROM corrected_data
@@ -52,33 +75,20 @@ func QueryCorrectedData(dbConn *sql.DB, siteID int) error {
 	ORDER BY timestamp ASC;
 	`, siteID)
 	if err != nil {
-		return fmt.Errorf("query corrected_data: %w", err)
+		return nil, fmt.Errorf("query corrected_data: %w", err)
 	}
 	defer rows.Close()
-	fmt.Println("ID, SiteID, Timestamp, Level(m), Temp(C), Sal(PSU), EC(uS)")
+
+	var correctedData []CorrectedDataRow
 	for rows.Next() {
-		// Process each row
-		var id int
-		var siteID int
-		var timestamp string
-		var levelM float64
-		var tempC sql.NullFloat64
-		var salPSU sql.NullFloat64
-		var ecUS sql.NullFloat64
-
-		if err := rows.Scan(&id, &siteID, &timestamp, &levelM, &tempC, &salPSU, &ecUS); err != nil {
-			return fmt.Errorf("scan logger_data: %w", err)
+		var row CorrectedDataRow
+		if err := rows.Scan(&row.ID, &row.SiteID, &row.Timestamp, &row.CorrectedValue, &row.TempC, &row.SalPSU, &row.ECUS); err != nil {
+			return nil, fmt.Errorf("scan corrected_data: %w", err)
 		}
-
-		// Print data to SDTOUT
-		fmt.Printf("%d, %d, %s, %.2f, %v, %v, %v\n",
-			id, siteID, timestamp, levelM,
-			NullFloattoString(tempC),
-			NullFloattoString(salPSU),
-			NullFloattoString(ecUS),
-		)
+		correctedData = append(correctedData, row)
 	}
-	return nil
+
+	return correctedData, nil
 }
 
 func NullFloattoString(nf sql.NullFloat64) string {

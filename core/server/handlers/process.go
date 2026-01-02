@@ -16,19 +16,19 @@ func Process(w http.ResponseWriter, r *http.Request) {
 
 	siteID, err := strconv.Atoi(r.URL.Query().Get("site_id"))
 	if err != nil {
-		http.Error(w, "invalid site_id", 400)
+		writeError(w, "invalid site_id", http.StatusBadRequest)
 		return
 	}
 
 	database, err := db.GetDB()
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer database.Close()
 
 	if err := process.ProcessLoggerData(database, siteID); err != nil {
-		http.Error(w, err.Error(), 500)
+		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

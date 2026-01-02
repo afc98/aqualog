@@ -13,7 +13,7 @@ func Projects(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		projects, err := project.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -22,13 +22,13 @@ func Projects(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req project.AddParams
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			writeError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 
 		p, err := project.Add(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

@@ -15,18 +15,18 @@ func Sites(w http.ResponseWriter, r *http.Request) {
 
 		projectID, err := parseOptionalInt(q.Get("project_id"))
 		if err != nil {
-			http.Error(w, "invalid project_id", http.StatusBadRequest)
+			writeError(w, "invalid project_id", http.StatusBadRequest)
 			return
 		}
 
 		if projectID == 0 {
-			http.Error(w, "project_id is required", http.StatusBadRequest)
+			writeError(w, "project_id is required", http.StatusBadRequest)
 			return
 		}
 
 		sites, err := site.List(projectID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -35,13 +35,13 @@ func Sites(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		var req site.AddParams
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
+			writeError(w, "invalid json", http.StatusBadRequest)
 			return
 		}
 
 		s, err := site.Add(req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 

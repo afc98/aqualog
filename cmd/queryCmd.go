@@ -20,19 +20,36 @@ var queryCmd = &cobra.Command{
 		}
 		typeFlag, _ := cmd.Flags().GetString("type")
 
-		// Open database
-		database, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
-			return
-		}
-		defer database.Close()
 		fmt.Println("Fetching data...")
 		switch typeFlag {
 		case "raw":
-			err = query.QueryLoggerData(database, siteID)
+			result, err := query.QueryLoggerData(siteID)
+			if err != nil {
+				fmt.Printf("Failed to query logger data for site %d, %w", siteID, err)
+				return
+			}
+			fmt.Println("Logger Data:")
+			for _, row := range result {
+				fmt.Printf("ID: %d, LoggerID: %d, Timestamp: %s, Level(m): %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
+					row.ID, row.LoggerID, row.Timestamp.Format("2006-01-02 15:04:05"), row.LevelM,
+					query.NullFloattoString(row.TempC),
+					query.NullFloattoString(row.SalPSU),
+					query.NullFloattoString(row.ECUS))
+			}
 		case "corrected":
-			err = query.QueryCorrectedData(database, siteID)
+			result, err := query.QueryCorrectedData(siteID)
+			if err != nil {
+				fmt.Printf("Failed to query corrected data for site %d, %w", siteID, err)
+				return
+			}
+			fmt.Println("Corrected Data:")
+			for _, row := range result {
+				fmt.Printf("ID: %d, SiteID: %d, Timestamp: %s, Corrected Value: %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
+					row.ID, row.SiteID, row.Timestamp.Format("2006-01-02 15:04:05"), row.CorrectedValue,
+					query.NullFloattoString(row.TempC),
+					query.NullFloattoString(row.SalPSU),
+					query.NullFloattoString(row.ECUS))
+			}
 		default:
 			fmt.Println("Invalid type specified. Use 'raw' or 'corrected'.")
 			return
