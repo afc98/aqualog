@@ -3,6 +3,7 @@ package importer
 import (
 	"aqualog/core/db"
 	"aqualog/core/parsers"
+	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
 	"os"
@@ -41,11 +42,6 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 	}
 }
 
-func timeTrack(start time.Time, name string) {
-	elapsed := time.Since(start)
-	fmt.Printf("%s took %s\n", name, elapsed)
-}
-
 func ImportRecords(
 	meta parsers.Metadata,
 	recs []parsers.Record,
@@ -53,7 +49,7 @@ func ImportRecords(
 	loggerID int,
 ) (*ImportResult, error) {
 
-	defer timeTrack(time.Now(), "ImportRecords")
+	defer utils.TimeTrack(time.Now(), "ImportRecords")
 
 	dbConn, err := db.GetDB()
 	if err != nil {

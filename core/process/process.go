@@ -1,6 +1,7 @@
 package process
 
 import (
+	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -40,6 +41,8 @@ type CorrectedRow struct {
 }
 
 func ProcessLoggerData(db *sql.DB, siteID int) error {
+
+	defer utils.TimeTrack(time.Now(), "ProcessLoggerData")
 
 	raw, err := LoadRawData(db, siteID)
 	if err != nil {
