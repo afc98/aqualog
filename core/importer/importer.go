@@ -41,12 +41,19 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 	}
 }
 
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	fmt.Printf("%s took %s\n", name, elapsed)
+}
+
 func ImportRecords(
 	meta parsers.Metadata,
 	recs []parsers.Record,
 	siteID int,
 	loggerID int,
 ) (*ImportResult, error) {
+
+	defer timeTrack(time.Now(), "ImportRecords")
 
 	dbConn, err := db.GetDB()
 	if err != nil {
@@ -82,36 +89,48 @@ func ImportRecords(
 	result.LoggerID = loggerID
 
 	// Insert records
-	for _, rec := range recs {
-		var existingID int
-		err := dbConn.QueryRow(`
-			SELECT id FROM logger_data
-			WHERE logger_id=? AND timestamp=?
-		`, loggerID, rec.Timestamp).Scan(&existingID)
+	const batchSize = 500
 
-		if err == nil {
-			result.Skipped++
-			continue
-		}
-		if err != sql.ErrNoRows {
-			return nil, err
+	for i := 0; i < len(recs); i += batchSize {
+		end := i + batchSize
+		if end > len(recs) {
+			end = len(recs)
 		}
 
-		_, err = dbConn.Exec(`
-			INSERT INTO logger_data (logger_id, timestamp, level_m, temp_c, sal_psu, ec_us)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, loggerID,
-			rec.Timestamp.Format(time.RFC3339),
-			rec.LevelM,
-			rec.TempC,
-			rec.SalPSU,
-			rec.EC,
-		)
+		query := `
+			INSERT OR IGNORE INTO logger_data (
+				logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
+			) VALUES
+		`
+
+		args := make([]any, 0, (end-i)*6)
+
+		for _, rec := range recs[i:end] {
+			query += "(?, ?, ?, ?, ?, ?),"
+			args = append(args,
+				loggerID,
+				rec.Timestamp,
+				rec.LevelM,
+				rec.TempC,
+				rec.SalPSU,
+				rec.EC,
+			)
+		}
+
+		// remove trailing comma
+		query = query[:len(query)-1]
+
+		res, err := dbConn.Exec(query, args...)
 		if err != nil {
 			return nil, err
 		}
 
-		result.Inserted++
+		rows, _ := res.RowsAffected()
+		inserted := int(rows)
+		attempted := end - i
+
+		result.Inserted += inserted
+		result.Skipped += attempted - inserted
 	}
 
 	return result, nil

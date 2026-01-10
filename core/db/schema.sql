@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS logger_data (
     temp_c REAL,
     sal_psu REAL,
     ec_us REAL,
+    UNIQUE (logger_id, timestamp)
     FOREIGN KEY (logger_id) REFERENCES loggers(id)
 );
 
