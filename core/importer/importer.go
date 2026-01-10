@@ -84,8 +84,9 @@ func ImportRecords(
 
 	result.LoggerID = loggerID
 
-	// Insert records
-	const batchSize = 500
+	// SQLite has a default max_bind_vars ~= 999. Each row uses 6 binds,
+	// so keep batchSize <= floor(999/6) = 166. Use 150 for safety.
+	const batchSize = 150
 
 	for i := 0; i < len(recs); i += batchSize {
 		end := i + batchSize

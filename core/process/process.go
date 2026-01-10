@@ -43,28 +43,43 @@ type CorrectedRow struct {
 func ProcessLoggerData(db *sql.DB, siteID int) error {
 
 	defer utils.TimeTrack(time.Now(), "ProcessLoggerData")
+	start := time.Now()
 
 	raw, err := LoadRawData(db, siteID)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("LoadRawData took %s\n", time.Since(start))
 
+	start = time.Now()
 	manual, err := LoadManualMeasurements(db, siteID)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("LoadManualMeasurements took %s\n", time.Since(start))
 
+	start = time.Now()
 	events, err := LoadLoggerEvents(db, siteID)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("LoadLoggerEvents took %s\n", time.Since(start))
 
+	start = time.Now()
 	corrected, err := ComputeCorrectedRows(raw, manual, events)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("ComputeCorrectedRows took %s\n", time.Since(start))
 
-	return StoreCorrectedRows(db, siteID, corrected)
+	start = time.Now()
+	err = StoreCorrectedRows(db, siteID, corrected)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("StoreCorrectedRows (batched) took %s\n", time.Since(start))
+
+	return err
 }
 
 func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
@@ -243,21 +258,50 @@ func StoreCorrectedRows(
 	rows []CorrectedRow,
 ) error {
 
-	for _, r := range rows {
-		_, err := db.Exec(`
-			INSERT OR REPLACE INTO corrected_data
-			(site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`,
-			siteID,
-			r.Timestamp.Format(time.RFC3339),
-			r.Value,
-			r.TempC,
-			r.SalPSU,
-			r.ECUS,
-		)
+	// SQLite has a default max_bind_vars ~= 999. Each row uses 6 binds,
+	// so keep batchSize <= floor(999/6) = 166. Use 150 for safety.
+	const batchSize = 150
+
+	for i := 0; i < len(rows); i += batchSize {
+		end := i + batchSize
+		if end > len(rows) {
+			end = len(rows)
+		}
+
+		query := `
+            INSERT OR REPLACE INTO corrected_data (
+                site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
+            ) VALUES
+        `
+		args := make([]any, 0, (end-i)*6)
+
+		for _, row := range rows[i:end] {
+			query += "(?, ?, ?, ?, ?, ?),"
+			args = append(args,
+				siteID,
+				row.Timestamp,
+				row.Value,
+				row.TempC,
+				row.SalPSU,
+				row.ECUS,
+			)
+		}
+
+		// remove trailing comma
+		query = query[:len(query)-1]
+
+		tx, err := db.Begin()
 		if err != nil {
-			return fmt.Errorf("insert corrected row at %s: %w", r.Timestamp, err)
+			return err
+		}
+
+		if _, err := tx.Exec(query, args...); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+
+		if err := tx.Commit(); err != nil {
+			return err
 		}
 	}
 
