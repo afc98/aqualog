@@ -141,6 +141,7 @@ func loadSeriesFromDB(db *sql.DB, siteID int, name string, start, end *time.Time
         WHERE site_id=?
           AND timestamp >= ?
           AND timestamp <= ?
+		ORDER BY timestamp ASC
     `, columnName)
 
 	rows, err := db.Query(queryStr, siteID, startTime, endTime)

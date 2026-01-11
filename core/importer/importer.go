@@ -5,16 +5,25 @@ import (
 	"aqualog/core/parsers"
 	"aqualog/core/utils"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 )
+
+var ErrFileAlreadyRecorded = errors.New("file already recorded for logger")
 
 type ImportResult struct {
 	LoggerID      int
 	Inserted      int
 	Skipped       int
 	LoggerCreated bool
+}
+
+type File struct {
+	LoggerID int
+	Path     string
+	Type     string
 }
 
 func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Record, error) {
@@ -42,14 +51,75 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 	}
 }
 
+func LoggerFileExists(loggerID int, filePath string) (bool, error) {
+	dbConn, err := db.GetDB()
+	if err != nil {
+		return false, err
+	}
+	defer dbConn.Close()
+
+	var exists bool
+	err = dbConn.QueryRow(
+		`SELECT EXISTS(
+			SELECT 1
+			FROM logger_files
+			WHERE logger_id = ? AND file = ?
+		)`,
+		loggerID, filePath,
+	).Scan(&exists)
+
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func insertLoggerFileTx(
+	tx *sql.Tx,
+	loggerID int,
+	filePath string,
+	fileType string,
+) (int, error) {
+
+	res, err := tx.Exec(
+		`INSERT INTO logger_files (logger_id, file, type)
+		 VALUES (?, ?, ?)`,
+		loggerID, filePath, fileType,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return int(id), nil
+}
+
 func ImportRecords(
 	meta parsers.Metadata,
 	recs []parsers.Record,
 	siteID int,
 	loggerID int,
+	filePath string,
+	fileType string,
 ) (*ImportResult, error) {
 
 	defer utils.TimeTrack(time.Now(), "ImportRecords")
+
+	// Advisory pre-flight check
+	if loggerID != -1 {
+		exists, err := LoggerFileExists(loggerID, filePath)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrFileAlreadyRecorded
+		}
+	}
 
 	dbConn, err := db.GetDB()
 	if err != nil {
@@ -57,17 +127,24 @@ func ImportRecords(
 	}
 	defer dbConn.Close()
 
+	tx, err := dbConn.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
 	result := &ImportResult{}
 
-	// Resolve or create logger
+	// Resolve or create logger (inside transaction)
 	if loggerID == -1 {
-		err = dbConn.QueryRow(`
-			SELECT id FROM loggers
-			WHERE serial_number=? AND site_id=?
+		err = tx.QueryRow(`
+			SELECT id
+			FROM loggers
+			WHERE serial_number = ? AND site_id = ?
 		`, meta.SerialNumber, siteID).Scan(&loggerID)
 
 		if err == sql.ErrNoRows {
-			res, err := dbConn.Exec(`
+			res, err := tx.Exec(`
 				INSERT INTO loggers (site_id, name, serial_number)
 				VALUES (?, ?, ?)
 			`, siteID, meta.SiteIdent, meta.SerialNumber)
@@ -84,9 +161,19 @@ func ImportRecords(
 
 	result.LoggerID = loggerID
 
-	// SQLite has a default max_bind_vars ~= 999. Each row uses 6 binds,
-	// so keep batchSize <= floor(999/6) = 166. Use 150 for safety.
-	const batchSize = 150
+	// Insert logger_files FIRST
+	loggerFileID, err := insertLoggerFileTx(
+		tx,
+		loggerID,
+		filePath,
+		fileType,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// SQLite max_bind_vars ~= 999
+	const batchSize = 130
 
 	for i := 0; i < len(recs); i += batchSize {
 		end := i + batchSize
@@ -96,16 +183,23 @@ func ImportRecords(
 
 		query := `
 			INSERT OR IGNORE INTO logger_data (
-				logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
+				logger_id,
+				logger_file_id,
+				timestamp,
+				level_m,
+				temp_c,
+				sal_psu,
+				ec_us
 			) VALUES
 		`
 
-		args := make([]any, 0, (end-i)*6)
+		args := make([]any, 0, (end-i)*7)
 
 		for _, rec := range recs[i:end] {
-			query += "(?, ?, ?, ?, ?, ?),"
+			query += "(?, ?, ?, ?, ?, ?, ?),"
 			args = append(args,
 				loggerID,
+				loggerFileID,
 				rec.Timestamp,
 				rec.LevelM,
 				rec.TempC,
@@ -114,10 +208,9 @@ func ImportRecords(
 			)
 		}
 
-		// remove trailing comma
 		query = query[:len(query)-1]
 
-		res, err := dbConn.Exec(query, args...)
+		res, err := tx.Exec(query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -128,6 +221,11 @@ func ImportRecords(
 
 		result.Inserted += inserted
 		result.Skipped += attempted - inserted
+	}
+
+	// Commit only after everything succeeds
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return result, nil

@@ -9,6 +9,7 @@ import (
 )
 
 type LoggerRawRow struct {
+	ID        int
 	Timestamp time.Time
 	RawValue  float64
 	TempC     float64
@@ -33,6 +34,7 @@ type OffsetSegment struct {
 }
 
 type CorrectedRow struct {
+	RawID     int
 	Timestamp time.Time
 	Value     float64
 	TempC     float64
@@ -86,6 +88,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 
 	rows, err := db.Query(`
 		SELECT
+			d.id,
 			d.timestamp,
 			d.level_m,
 			d.temp_c,
@@ -110,6 +113,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 		var tempC, salPSU, ecUS sql.NullFloat64
 
 		if err := rows.Scan(
+			&r.ID,
 			&ts,
 			&r.RawValue,
 			&tempC,
@@ -241,6 +245,7 @@ func ComputeCorrectedRows(
 		}
 
 		out = append(out, CorrectedRow{
+			RawID:     r.ID,
 			Timestamp: r.Timestamp,
 			Value:     r.RawValue + seg.Offset,
 			TempC:     r.TempC,
@@ -259,8 +264,8 @@ func StoreCorrectedRows(
 ) error {
 
 	// SQLite has a default max_bind_vars ~= 999. Each row uses 6 binds,
-	// so keep batchSize <= floor(999/6) = 166. Use 150 for safety.
-	const batchSize = 150
+	// so keep batchSize <= floor(999/7) = 142. Use 130 for safety.
+	const batchSize = 130
 
 	for i := 0; i < len(rows); i += batchSize {
 		end := i + batchSize
@@ -270,15 +275,16 @@ func StoreCorrectedRows(
 
 		query := `
             INSERT OR REPLACE INTO corrected_data (
-                site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
+                site_id, logger_data_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
             ) VALUES
         `
 		args := make([]any, 0, (end-i)*6)
 
 		for _, row := range rows[i:end] {
-			query += "(?, ?, ?, ?, ?, ?),"
+			query += "(?, ?, ?, ?, ?, ?, ?),"
 			args = append(args,
 				siteID,
+				row.RawID,
 				row.Timestamp,
 				row.Value,
 				row.TempC,

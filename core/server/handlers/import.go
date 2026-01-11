@@ -37,6 +37,8 @@ func Import(w http.ResponseWriter, r *http.Request) {
 		recs,
 		req.SiteID,
 		req.LoggerID,
+		req.FilePath,
+		req.FileType,
 	)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)

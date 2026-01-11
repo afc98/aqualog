@@ -24,7 +24,7 @@ func Add(p AddParams) (Logger, error) {
 	// Open database
 	database, err := db.GetDB()
 	if err != nil {
-		return Logger{}, fmt.Errorf("Database error: %w", err)
+		return Logger{}, fmt.Errorf("database error: %w", err)
 	}
 	defer database.Close()
 
@@ -34,7 +34,7 @@ func Add(p AddParams) (Logger, error) {
 		p.SiteID, p.Name, p.Model, p.Serial,
 	)
 	if err != nil {
-		return Logger{}, fmt.Errorf("Failed to add logger: %w", err)
+		return Logger{}, fmt.Errorf("failed to add logger: %w", err)
 	}
 
 	id, err := result.LastInsertId()

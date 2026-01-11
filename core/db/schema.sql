@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -12,7 +14,7 @@ CREATE TABLE IF NOT EXISTS sites (
     latitude REAL,
     longitude REAL,
     description TEXT,
-    FOREIGN KEY (project_id) REFERENCES projects(id)
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS loggers (
@@ -22,19 +24,31 @@ CREATE TABLE IF NOT EXISTS loggers (
     model TEXT,
     serial_number TEXT,
     depth_offset_cm REAL,
-    FOREIGN KEY  (site_id) REFERENCES sites(id)
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS logger_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    logger_id INTEGER NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    file TEXT NOT NULL,
+    type TEXT,
+    UNIQUE (logger_id, file),
+    FOREIGN KEY (logger_id) REFERENCES loggers(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS logger_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     logger_id INTEGER NOT NULL,
+    logger_file_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
     level_m REAL,
     temp_c REAL,
     sal_psu REAL,
     ec_us REAL,
-    UNIQUE (logger_id, timestamp)
-    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+    UNIQUE (logger_id, timestamp),
+    FOREIGN KEY (logger_id) REFERENCES loggers(id) ON DELETE CASCADE,
+    FOREIGN KEY (logger_file_id) REFERENCES logger_files(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS logger_events (
@@ -43,35 +57,28 @@ CREATE TABLE IF NOT EXISTS logger_events (
     timestamp DATETIME NOT NULL,
     event_type TEXT NOT NULL,
     notes TEXT,
-    FOREIGN KEY (logger_id) REFERENCES loggers(id)
+    FOREIGN KEY (logger_id) REFERENCES loggers(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS manual_readings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
-    value REAT NOT NULL, -- Water level relative to datum
+    value REAL NOT NULL,
     notes TEXT,
-    FOREIGN KEY (site_id) REFERENCES sites(id)
-);
-
-CREATE TABLE IF NOT EXISTS corrections (
-    if INTEGER PRIMARY KEY AUTOINCREMENT,
-    site_id INTEGER NOT NULL,
-    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    method TEXT NOT NULL,
-    parameters TEXT NOT NULL,
-    FOREIGN KEY (site_id) REFERENCES sites(id)
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS corrected_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER NOT NULL,
+    logger_data_id INTEGER NOT NULL,
     timestamp DATETIME NOT NULL,
-    corrected_value REAL NOT NULL, -- Water level relative to datum
+    corrected_value REAL NOT NULL,
     temp_c REAL,
     sal_psu REAL,
     ec_us REAL,
     UNIQUE (site_id, timestamp),
-    FOREIGN KEY (site_id) REFERENCES sites(id)
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (logger_data_id) REFERENCES logger_data(id) ON DELETE CASCADE
 );

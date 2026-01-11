@@ -24,8 +24,7 @@ var loggerImportCmd = &cobra.Command{
 		loggerIdent, _ := cmd.Flags().GetString("logger")
 		loggerID, err := db.ResolveLoggerIdentifier(loggerIdent)
 		if err != nil {
-			fmt.Println("Logger not found:", err)
-			return
+			loggerID = -1
 		}
 
 		meta, recs, err := importer.ParseLoggerFile(fileType, filePath)
@@ -34,7 +33,7 @@ var loggerImportCmd = &cobra.Command{
 			return
 		}
 
-		result, err := importer.ImportRecords(meta, recs, siteID, loggerID)
+		result, err := importer.ImportRecords(meta, recs, siteID, loggerID, filePath, fileType)
 		if err != nil {
 			fmt.Println("Import failed:", err)
 			return
