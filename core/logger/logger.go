@@ -2,6 +2,7 @@ package logger
 
 import (
 	"aqualog/core/db"
+	"database/sql"
 	"fmt"
 )
 
@@ -78,12 +79,14 @@ func List(SiteID int) ([]Logger, error) {
 
 	for rows.Next() {
 		var l Logger
+		var model sql.NullString
+		var serial sql.NullString
 		if err := rows.Scan(
 			&l.ID,
 			&l.SiteID,
 			&l.Name,
-			&l.Model,
-			&l.Serial,
+			&model,
+			&serial,
 		); err != nil {
 			return nil, err
 		}
