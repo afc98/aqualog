@@ -57,7 +57,7 @@ func Events(w http.ResponseWriter, r *http.Request) {
 }
 
 func EventByID(w http.ResponseWriter, r *http.Request) {
-	idStr := strings.TrimPrefix(r.URL.Path, "/events/")
+	idStr := strings.TrimPrefix(r.URL.Path, "/event/")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		writeError(w, "invalid id", http.StatusBadRequest)
@@ -81,19 +81,33 @@ func EventByID(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 
+	case http.MethodPut:
+		var req event.UpdateParams
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+
+		existing, err := event.Get(id)
+		if err != nil {
+			writeError(w, "error getting event", http.StatusNotFound)
+			return
+		}
+
+		updated, err := event.PrepareUpdate(existing, req)
+		if err != nil {
+			writeError(w, "error preparing update", http.StatusBadRequest)
+			return
+		}
+
+		if err := event.Update(id, updated); err != nil {
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeSuccess(w, updated)
+
 	default:
 		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}
-
-func parseOptionalInt(s string) (int, error) {
-	if s == "" {
-		return 0, nil
-	}
-	return strconv.Atoi(s)
-}

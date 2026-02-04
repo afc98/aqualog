@@ -212,56 +212,157 @@ func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 }
 
 func ComputeCorrectedRows(
+
 	raw []LoggerRawRow,
+
 	manual []ManualMeasurement,
+
 	events []LoggerEvent,
+
 ) ([]CorrectedRow, error) {
 
+
+
 	windows, err := buildValidWindows(events)
+
 	if err != nil {
+
 		return nil, err
+
 	}
+
+
 
 	var out []CorrectedRow
 
+
+
 	for _, w := range windows {
 
+
+
 		rawWin := filterRawToWindow(raw, w)
+
 		if len(rawWin) < 2 {
+
 			continue
+
 		}
 
-		interval := loggerInterval(rawWin)
 
-		manualWin := filterManualToExtendedWindow(manual, w, interval)
 
-		segments := buildOffsetSegments(rawWin, manualWin, interval)
+						interval := loggerInterval(rawWin)
 
-		segIdx := 0
-		for _, r := range rawWin {
+
+
+				
+
+
+
+						manualWin := filterManualToExtendedWindow(manual, w, interval)
+
+
+
+				
+
+
+
+								segments := buildOffsetSegments(rawWin, manualWin, interval)
+
+
+
+				
+
+
+
+								if len(segments) == 0 {
+
+
+
+				
+
+
+
+									continue // No segments to process for this window
+
+
+
+				
+
+
+
+								}
+
+
+
+				
+
+
+
+						
+
+
+
+				
+
+
+
+								segIdx := 0
+
+
+
+				
+
+
+
+								for _, r := range rawWin {
+
+
 
 			for segIdx+1 < len(segments) &&
+
 				!r.Timestamp.Before(segments[segIdx+1].Start) {
+
 				segIdx++
+
 			}
+
+
 
 			seg := segments[segIdx]
+
 			if r.Timestamp.Before(seg.Start) || !r.Timestamp.Before(seg.End) {
+
 				continue
+
 			}
 
+
+
 			out = append(out, CorrectedRow{
+
 				RawID:     r.ID,
+
 				Timestamp: r.Timestamp,
+
 				Value:     r.RawValue + seg.Offset,
+
 				TempC:     r.TempC,
+
 				SalPSU:    r.SalPSU,
+
 				ECUS:      r.ECUS,
+
 			})
+
 		}
+
 	}
 
+
+
 	return out, nil
+
 }
 
 func StoreCorrectedRows(

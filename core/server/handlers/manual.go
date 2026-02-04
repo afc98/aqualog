@@ -80,6 +80,31 @@ func ManualReadingByID(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 
+	case http.MethodPut:
+		var req manual.UpdateParams
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+
+		existing, err := manual.Get(id)
+		if err != nil {
+			writeError(w, "error getting manual reading", http.StatusNotFound)
+			return
+		}
+
+		updated, err := manual.PrepareUpdate(existing, req)
+		if err != nil {
+			writeError(w, "error preparing update", http.StatusBadRequest)
+			return
+		}
+
+		if err := manual.Update(id, updated); err != nil {
+			writeError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, updated)
+
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
