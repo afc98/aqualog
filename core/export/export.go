@@ -241,12 +241,23 @@ func loggerAt(db *sql.DB, siteID int, t time.Time) (name, model, serial string, 
 		LIMIT 1
 	`, siteID, t.Format(time.RFC3339))
 
-	err = row.Scan(&name, &model, &serial)
+	var nullName, nullModel, nullSerial sql.NullString
+	err = row.Scan(&nullName, &nullModel, &nullSerial)
 	if err == sql.ErrNoRows {
 		return "", "", "", nil
 	}
 	if err != nil {
 		return "", "", "", err
+	}
+
+	if nullName.Valid {
+		name = nullName.String
+	}
+	if nullModel.Valid {
+		model = nullModel.String
+	}
+	if nullSerial.Valid {
+		serial = nullSerial.String
 	}
 
 	return name, model, serial, nil
