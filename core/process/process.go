@@ -267,7 +267,7 @@ func ComputeCorrectedRows(
 
 
 
-								segments := buildOffsetSegments(rawWin, manualWin, interval)
+								segments := buildOffsetSegments(rawWin, manualWin, interval, w)
 
 
 
@@ -493,7 +493,7 @@ func filterManualToExtendedWindow(
 
 /* ---------------- Offset construction ---------------- */
 
-func buildOffsetSegments(raw []LoggerRawRow, manual []ManualMeasurement, maxDist time.Duration) []OffsetSegment {
+func buildOffsetSegments(raw []LoggerRawRow, manual []ManualMeasurement, maxDist time.Duration, w TimeWindow) []OffsetSegment {
 	if len(manual) == 0 {
 		return nil
 	}
@@ -502,32 +502,50 @@ func buildOffsetSegments(raw []LoggerRawRow, manual []ManualMeasurement, maxDist
 		return manual[i].Timestamp.Before(manual[j].Timestamp)
 	})
 
-	var segments []OffsetSegment
+	type temporalOffset struct {
+		Timestamp time.Time
+		Offset    float64
+	}
+	var offsets []temporalOffset
 
-	for i, m := range manual {
+	for _, m := range manual {
 		rawVal, ok := nearestLoggerValue(raw, m.Timestamp, maxDist)
 		if !ok {
-			continue
+			continue // Skip manual measurements without a corresponding raw value
 		}
-
-		seg := OffsetSegment{
-			Start:  m.Timestamp,
-			Offset: m.Level - rawVal,
-		}
-
-		if i+1 < len(manual) {
-			// make sure seg.End > seg.Start
-			next := manual[i+1].Timestamp
-			if next.Before(seg.Start) {
-				next = seg.Start.Add(maxDist) // fallback
-			}
-			seg.End = next
-		} else {
-			seg.End = raw[len(raw)-1].Timestamp.Add(maxDist)
-		}
-
-		segments = append(segments, seg)
+		offsets = append(offsets, temporalOffset{
+			Timestamp: m.Timestamp,
+			Offset:    m.Level - rawVal,
+		})
 	}
+
+	if len(offsets) == 0 {
+		return nil
+	}
+
+	var segments []OffsetSegment
+
+	// Segment from start of window to first offset point
+	segments = append(segments, OffsetSegment{
+		Start:  w.Start,
+		End:    offsets[0].Timestamp,
+		Offset: offsets[0].Offset, // Apply the first offset backward
+	})
+
+	for i := 0; i < len(offsets)-1; i++ {
+		segments = append(segments, OffsetSegment{
+			Start:  offsets[i].Timestamp,
+			End:    offsets[i+1].Timestamp,
+			Offset: offsets[i+1].Offset, // Apply the next offset backward from its point
+		})
+	}
+
+	// Segment from last offset point to end of window
+	segments = append(segments, OffsetSegment{
+		Start:  offsets[len(offsets)-1].Timestamp,
+		End:    w.End,
+		Offset: offsets[len(offsets)-1].Offset,
+	})
 
 	return segments
 }

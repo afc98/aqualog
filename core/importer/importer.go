@@ -46,6 +46,13 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 		}
 		return data.Metadata, data.Records, nil
 
+	case "insitu":
+		data, err := parsers.ParseInsitu(filePath)
+		if err != nil {
+			return parsers.Metadata{}, nil, err
+		}
+		return data.Metadata, data.Records, nil
+
 	default:
 		return parsers.Metadata{}, nil, fmt.Errorf("unsupported file type")
 	}
