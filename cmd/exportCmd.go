@@ -23,7 +23,7 @@ var exportCmd = &cobra.Command{
 		fmt.Println("Exporting data...")
 		err = export.ExportData(siteID, fileName)
 		if err != nil {
-			fmt.Printf("Failed to export logger data for site %d, %w", siteID, err)
+			fmt.Printf("Failed to export logger data for site %d: %v\n", siteID, err)
 			return
 		}
 		fmt.Println("Successfully exported logger data for site", siteID)

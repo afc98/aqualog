@@ -17,7 +17,12 @@ type ImportResult struct {
 	LoggerID      int
 	Inserted      int
 	Skipped       int
+	Replaced      int
 	LoggerCreated bool
+}
+
+type ImportOptions struct {
+	ReplaceExisting bool
 }
 
 type File struct {
@@ -113,6 +118,7 @@ func ImportRecords(
 	loggerID int,
 	filePath string,
 	fileType string,
+	options ImportOptions,
 ) (*ImportResult, error) {
 
 	defer utils.TimeTrack(time.Now(), "ImportRecords")
@@ -188,8 +194,13 @@ func ImportRecords(
 			end = len(recs)
 		}
 
-		query := `
-			INSERT OR IGNORE INTO logger_data (
+		insertVerb := "INSERT OR IGNORE"
+		if options.ReplaceExisting {
+			insertVerb = "INSERT"
+		}
+
+		query := fmt.Sprintf(`
+			%s INTO logger_data (
 				logger_id,
 				logger_file_id,
 				timestamp,
@@ -198,7 +209,7 @@ func ImportRecords(
 				sal_psu,
 				ec_us
 			) VALUES
-		`
+		`, insertVerb)
 
 		args := make([]any, 0, (end-i)*7)
 
@@ -216,18 +227,43 @@ func ImportRecords(
 		}
 
 		query = query[:len(query)-1]
+		if options.ReplaceExisting {
+			replaced, err := countExistingRecordsTx(tx, loggerID, recs[i:end])
+			if err != nil {
+				return nil, err
+			}
+			result.Replaced += replaced
+			result.Inserted += (end - i) - replaced
+
+			query += `
+				ON CONFLICT(logger_id, timestamp) DO UPDATE SET
+					logger_file_id = excluded.logger_file_id,
+					level_m = excluded.level_m,
+					temp_c = excluded.temp_c,
+					sal_psu = excluded.sal_psu,
+					ec_us = excluded.ec_us
+			`
+		}
 
 		res, err := tx.Exec(query, args...)
 		if err != nil {
 			return nil, err
 		}
 
-		rows, _ := res.RowsAffected()
-		inserted := int(rows)
-		attempted := end - i
+		if !options.ReplaceExisting {
+			rows, _ := res.RowsAffected()
+			inserted := int(rows)
+			attempted := end - i
 
-		result.Inserted += inserted
-		result.Skipped += attempted - inserted
+			result.Inserted += inserted
+			result.Skipped += attempted - inserted
+		}
+	}
+
+	if result.Replaced > 0 {
+		if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
+			return nil, fmt.Errorf("failed to invalidate corrected data: %w", err)
+		}
 	}
 
 	// Commit only after everything succeeds
@@ -236,4 +272,33 @@ func ImportRecords(
 	}
 
 	return result, nil
+}
+
+func countExistingRecordsTx(tx *sql.Tx, loggerID int, recs []parsers.Record) (int, error) {
+	if len(recs) == 0 {
+		return 0, nil
+	}
+
+	query := `
+		SELECT COUNT(*)
+		FROM logger_data
+		WHERE logger_id = ?
+		  AND timestamp IN (
+	`
+	args := make([]any, 0, len(recs)+1)
+	args = append(args, loggerID)
+
+	for _, rec := range recs {
+		query += "?,"
+		args = append(args, rec.Timestamp)
+	}
+
+	query = query[:len(query)-1] + ")"
+
+	var count int
+	if err := tx.QueryRow(query, args...).Scan(&count); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }

@@ -15,6 +15,7 @@ var loggerImportCmd = &cobra.Command{
 		// Read flags
 		fileType, _ := cmd.Flags().GetString("type")
 		filePath, _ := cmd.Flags().GetString("file")
+		replaceExisting, _ := cmd.Flags().GetBool("replace")
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -33,16 +34,19 @@ var loggerImportCmd = &cobra.Command{
 			return
 		}
 
-		result, err := importer.ImportRecords(meta, recs, siteID, loggerID, filePath, fileType)
+		result, err := importer.ImportRecords(meta, recs, siteID, loggerID, filePath, fileType, importer.ImportOptions{
+			ReplaceExisting: replaceExisting,
+		})
 		if err != nil {
 			fmt.Println("Import failed:", err)
 			return
 		}
 
 		fmt.Printf(
-			"Imported %d records (%d skipped). Logger ID: %d\n",
+			"Imported %d records (%d skipped, %d replaced). Logger ID: %d\n",
 			result.Inserted,
 			result.Skipped,
+			result.Replaced,
 			result.LoggerID,
 		)
 	},
@@ -53,6 +57,7 @@ func init() {
 	loggerImportCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	loggerImportCmd.Flags().StringP("site", "s", "", "Site ID")
 	loggerImportCmd.Flags().StringP("logger", "l", "", "Logger ID")
+	loggerImportCmd.Flags().Bool("replace", false, "Replace existing records for matching logger timestamps")
 
 	loggerImportCmd.MarkFlagRequired(("file"))
 	loggerImportCmd.MarkFlagRequired(("type"))

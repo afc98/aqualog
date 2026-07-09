@@ -25,7 +25,7 @@ var queryCmd = &cobra.Command{
 		case "raw":
 			result, err := query.QueryLoggerData(siteID)
 			if err != nil {
-				fmt.Printf("Failed to query logger data for site %d, %w", siteID, err)
+				fmt.Printf("Failed to query logger data for site %d: %v\n", siteID, err)
 				return
 			}
 			fmt.Println("Logger Data:")
@@ -39,7 +39,7 @@ var queryCmd = &cobra.Command{
 		case "corrected":
 			result, err := query.QueryCorrectedData(siteID)
 			if err != nil {
-				fmt.Printf("Failed to query corrected data for site %d, %w", siteID, err)
+				fmt.Printf("Failed to query corrected data for site %d: %v\n", siteID, err)
 				return
 			}
 			fmt.Println("Corrected Data:")
@@ -55,7 +55,7 @@ var queryCmd = &cobra.Command{
 			return
 		}
 		if err != nil {
-			fmt.Printf("Failed to query logger data for site %d, %w", siteID, err)
+			fmt.Printf("Failed to query logger data for site %d: %v\n", siteID, err)
 			return
 		}
 		fmt.Println("Successfully queried logger data for site", siteID)

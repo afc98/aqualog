@@ -12,6 +12,7 @@ type importRequest struct {
 	FilePath string `json:"file_path"`
 	SiteID   int    `json:"site_id"`
 	LoggerID int    `json:"logger_id"`
+	Replace  bool   `json:"replace"`
 }
 
 func Import(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +40,7 @@ func Import(w http.ResponseWriter, r *http.Request) {
 		req.LoggerID,
 		req.FilePath,
 		req.FileType,
+		importer.ImportOptions{ReplaceExisting: req.Replace},
 	)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)

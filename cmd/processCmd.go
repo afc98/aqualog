@@ -29,7 +29,7 @@ var processCmd = &cobra.Command{
 		fmt.Println("Processing logger data...")
 		err = process.ProcessLoggerData(database, siteID)
 		if err != nil {
-			fmt.Printf("Failed to process logger data for site %d, %w", siteID, err)
+			fmt.Printf("Failed to process logger data for site %d: %v\n", siteID, err)
 			return
 		}
 		fmt.Println("Successfully process logger data for site", siteID)
