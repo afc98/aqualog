@@ -14,7 +14,7 @@ A command-line tool for managing environmental data logger records from multiple
 
 ### Data Import and Processing
 
-- **Data Import**: Import compensated logger data from Aquaread or Solinst formatted text files
+- **Data Import**: Import compensated logger data from Aquaread, Solinst or In-Situ formatted text files
 - **Data Processing**: Process and analyse logger time-series data, including elevation correction
 
 ### Visualisation
@@ -71,14 +71,18 @@ Loggers belong to sites and represent individual physical instruments. Multiple 
 
 ### Events
 
-Events segment logger records within a site (e.g. installation, movement, or removal). Each segment can be processed independently so that changes in logger position or datum can be accounted for.
+Events segment logger records within a site (e.g. installation or removal). Each segment can be processed independently so that changes in logger position or datum can be accounted for.
 
 Supported event types are:
 
 - `installed`: Logger installation or commissioning
-- `moved`: Change in logger position or reference elevation
 - `removed`: Logger removal or decommissioning
+
+The following event types can also be entered but these are not currently recognised by aqualog's processing:
+
+- `moved`: Change in logger position or reference elevation
 - `other`: Any other event affecting data interpretation
+
 
 ### Manual Readings
 
@@ -190,11 +194,19 @@ The water level, time, and notes for a manual reading can be updated using the `
 
 ### Import Compensated Datalogger Data
 
-Currently supported types are `aquaread` and `solinst`. In-Situ logger data support is planned.
+Currently supported types are `aquaread`, `solinst`, and `insitu`.
 
 ```bash
 ./aqualog import --type aquaread --site "Site 1" --logger "Logger 1" --file "path/to/file.tab"
 ```
+
+By default, imports skip records that already exist for the same logger and timestamp. Use `--replace` to overwrite matching timestamp records with values from the imported file.
+
+```bash
+./aqualog import --type aquaread --site "Site 1" --logger "Logger 1" --file "path/to/file.tab" --replace
+```
+
+The import summary reports how many records were inserted, skipped, and replaced. When records are replaced, processed/corrected data for the site are invalidated; run `process` again to regenerate corrected values.
 
 ### Process Data for a Site
 
@@ -216,4 +228,101 @@ Supported series include level, EC, salinity, and temperature.
 
 ```bash
 ./aqualog export --site "Site 1" --file "output.csv"
+```
+
+## HTTP Server API
+
+Aqualog can also be run as a local HTTP server.
+
+```bash
+./aqualog serve
+```
+
+The default listen address is `127.0.0.1:8080`. Use `--addr` to choose a different address.
+
+```bash
+./aqualog serve --addr 127.0.0.1:8080
+```
+
+Requests and responses use JSON unless an endpoint returns `204 No Content`. Error responses use the following shape:
+
+```json
+{"status":"error","message":"...","code":400}
+```
+
+### Endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/project` | List projects |
+| `POST` | `/project` | Create a project |
+| `GET` | `/site?project_id=1` | List sites for a project |
+| `POST` | `/site` | Create a site |
+| `GET` | `/logger?site_id=1` | List loggers for a site |
+| `POST` | `/logger` | Create a logger |
+| `GET` | `/manual?site_id=1` | List manual readings for a site |
+| `POST` | `/manual` | Create a manual reading |
+| `GET` | `/manual/{id}` | Get a manual reading |
+| `PUT` | `/manual/{id}` | Update a manual reading |
+| `DELETE` | `/manual/{id}` | Delete a manual reading |
+| `GET` | `/event?site_id=1&logger_id=1` | List events by site and/or logger |
+| `POST` | `/event` | Create an event |
+| `GET` | `/event/{id}` | Get an event |
+| `PUT` | `/event/{id}` | Update an event |
+| `DELETE` | `/event/{id}` | Delete an event |
+| `POST` | `/import` | Import logger data |
+| `POST` | `/process?site_id=1` | Process logger data for a site |
+| `POST` | `/export` | Export processed data |
+| `GET` | `/data?site_id=1&type=raw` | Query raw logger data |
+| `GET` | `/data?site_id=1&type=corrected` | Query corrected data |
+
+Most successful responses return the created or requested object directly. Event endpoints return a wrapper with `status` and `data`.
+
+### HTTP Examples
+
+Create a project:
+
+```bash
+curl -X POST http://127.0.0.1:8080/project \
+  -H "Content-Type: application/json" \
+  -d '{"Name":"My Project","Description":"Monitoring project"}'
+```
+
+Create a site:
+
+```bash
+curl -X POST http://127.0.0.1:8080/site \
+  -H "Content-Type: application/json" \
+  -d '{"ProjectID":1,"Name":"Site 1","Latitude":45.0,"Longitude":-120.0}'
+```
+
+Create a logger:
+
+```bash
+curl -X POST http://127.0.0.1:8080/logger \
+  -H "Content-Type: application/json" \
+  -d '{"SiteID":1,"Name":"Logger 1","Model":"Aquaread LeveLine CTD","Serial":"1234567"}'
+```
+
+Import logger data and replace existing timestamp matches:
+
+```bash
+curl -X POST http://127.0.0.1:8080/import \
+  -H "Content-Type: application/json" \
+  -d '{"file_type":"aquaread","file_path":"path/to/file.tab","site_id":1,"logger_id":1,"replace":true}'
+```
+
+Process a site and query corrected data:
+
+```bash
+curl -X POST "http://127.0.0.1:8080/process?site_id=1"
+curl "http://127.0.0.1:8080/data?site_id=1&type=corrected"
+```
+
+Export processed data:
+
+```bash
+curl -X POST http://127.0.0.1:8080/export \
+  -H "Content-Type: application/json" \
+  -d '{"site_id":1,"file_path":"output.csv"}'
 ```
