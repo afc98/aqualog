@@ -90,8 +90,48 @@ func List(SiteID int) ([]Logger, error) {
 		); err != nil {
 			return nil, err
 		}
+		if model.Valid {
+			l.Model = model.String
+		}
+		if serial.Valid {
+			l.Serial = serial.String
+		}
 		loggers = append(loggers, l)
 	}
 
 	return loggers, nil
+}
+
+func Update(id int, name string, model string, serial string) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+	if name != "" {
+		if _, err := database.Exec(`UPDATE loggers SET name = ? WHERE id = ?`, name, id); err != nil {
+			return err
+		}
+	}
+	if model != "" {
+		if _, err := database.Exec(`UPDATE loggers SET model = ? WHERE id = ?`, model, id); err != nil {
+			return err
+		}
+	}
+	if serial != "" {
+		if _, err := database.Exec(`UPDATE loggers SET serial_number = ? WHERE id = ?`, serial, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Remove(id int) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+	_, err = database.Exec(`DELETE FROM loggers WHERE id = ?`, id)
+	return err
 }

@@ -110,4 +110,3 @@ func EventByID(w http.ResponseWriter, r *http.Request) {
 		writeError(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
-

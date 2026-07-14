@@ -5,6 +5,7 @@ import (
 	"aqualog/core/process"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -33,12 +34,33 @@ type ExportRow struct {
 	ECUS           float64
 }
 
+type Options struct {
+	From   string
+	To     string
+	Format string
+}
+
 func ExportData(siteID int, fileName string) error {
+	return ExportDataWithOptions(siteID, fileName, Options{Format: "csv"})
+}
+
+func ExportDataWithOptions(siteID int, fileName string, opts Options) error {
 	rows, err := BuildExport(siteID)
 	if err != nil {
 		return err
 	}
-	return WriteCSV(rows, fileName)
+	rows, err = filterRows(rows, opts)
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case "", "csv":
+		return WriteCSV(rows, fileName)
+	case "json":
+		return WriteJSON(rows, fileName)
+	default:
+		return fmt.Errorf("unsupported export format %q", opts.Format)
+	}
 }
 
 func BuildExport(siteID int) ([]ExportRow, error) {
@@ -139,6 +161,52 @@ func WriteCSV(rows []ExportRow, fileName string) error {
 	}
 
 	return nil
+}
+
+func WriteJSON(rows []ExportRow, fileName string) error {
+	f, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(rows)
+}
+
+func filterRows(rows []ExportRow, opts Options) ([]ExportRow, error) {
+	var from, to time.Time
+	var err error
+	if opts.From != "" {
+		from, err = time.Parse(time.RFC3339, opts.From)
+		if err != nil {
+			return nil, fmt.Errorf("invalid from timestamp: %w", err)
+		}
+	}
+	if opts.To != "" {
+		to, err = time.Parse(time.RFC3339, opts.To)
+		if err != nil {
+			return nil, fmt.Errorf("invalid to timestamp: %w", err)
+		}
+	}
+	if opts.From == "" && opts.To == "" {
+		return rows, nil
+	}
+	out := make([]ExportRow, 0, len(rows))
+	for _, row := range rows {
+		t, err := time.Parse(time.RFC3339, row.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		if opts.From != "" && t.Before(from) {
+			continue
+		}
+		if opts.To != "" && t.After(to) {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 func loadCorrectedData(dbConn *sql.DB, siteID int) ([]LoggerCorrectedRow, error) {

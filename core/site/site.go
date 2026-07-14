@@ -6,18 +6,20 @@ import (
 )
 
 type AddParams struct {
-	ProjectID int
-	Name      string
-	Latitude  float64
-	Longitude float64
+	ProjectID   int
+	Name        string
+	Latitude    float64
+	Longitude   float64
+	Description string
 }
 
 type Site struct {
-	ID        int
-	ProjectID int
-	Name      string
-	Latitude  float64
-	Longitude float64
+	ID          int
+	ProjectID   int
+	Name        string
+	Latitude    float64
+	Longitude   float64
+	Description string
 }
 
 func Add(p AddParams) (Site, error) {
@@ -83,4 +85,43 @@ func List(ProjectID int) ([]Site, error) {
 	}
 
 	return sites, nil
+}
+
+func Update(id int, name string, latitude *float64, longitude *float64, description string) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+	if name != "" {
+		if _, err := database.Exec(`UPDATE sites SET name = ? WHERE id = ?`, name, id); err != nil {
+			return err
+		}
+	}
+	if latitude != nil {
+		if _, err := database.Exec(`UPDATE sites SET latitude = ? WHERE id = ?`, *latitude, id); err != nil {
+			return err
+		}
+	}
+	if longitude != nil {
+		if _, err := database.Exec(`UPDATE sites SET longitude = ? WHERE id = ?`, *longitude, id); err != nil {
+			return err
+		}
+	}
+	if description != "" {
+		if _, err := database.Exec(`UPDATE sites SET description = ? WHERE id = ?`, description, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Remove(id int) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+	_, err = database.Exec(`DELETE FROM sites WHERE id = ?`, id)
+	return err
 }

@@ -3,7 +3,11 @@ package cmd
 import (
 	"aqualog/core/db"
 	"aqualog/core/query"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -19,37 +23,36 @@ var queryCmd = &cobra.Command{
 			return
 		}
 		typeFlag, _ := cmd.Flags().GetString("type")
+		format, _ := cmd.Flags().GetString("format")
+		from, _ := cmd.Flags().GetString("from")
+		to, _ := cmd.Flags().GetString("to")
+		limit, _ := cmd.Flags().GetInt("limit")
+		loggerID := 0
+		loggerIdent, _ := cmd.Flags().GetString("logger")
+		if loggerIdent != "" {
+			loggerID, err = db.ResolveLoggerIdentifier(loggerIdent)
+			if err != nil {
+				fmt.Println("Logger not found:", err)
+				return
+			}
+		}
+		opts := query.Options{From: from, To: to, LoggerID: loggerID, Limit: limit}
 
-		fmt.Println("Fetching data...")
 		switch typeFlag {
 		case "raw":
-			result, err := query.QueryLoggerData(siteID)
+			result, err := query.QueryLoggerDataWithOptions(siteID, opts)
 			if err != nil {
 				fmt.Printf("Failed to query logger data for site %d: %v\n", siteID, err)
 				return
 			}
-			fmt.Println("Logger Data:")
-			for _, row := range result {
-				fmt.Printf("ID: %d, LoggerID: %d, Timestamp: %s, Level(m): %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
-					row.ID, row.LoggerID, row.Timestamp.Format("2006-01-02 15:04:05"), row.LevelM,
-					query.NullFloattoString(row.TempC),
-					query.NullFloattoString(row.SalPSU),
-					query.NullFloattoString(row.ECUS))
-			}
+			printRawQuery(result, format)
 		case "corrected":
-			result, err := query.QueryCorrectedData(siteID)
+			result, err := query.QueryCorrectedDataWithOptions(siteID, opts)
 			if err != nil {
 				fmt.Printf("Failed to query corrected data for site %d: %v\n", siteID, err)
 				return
 			}
-			fmt.Println("Corrected Data:")
-			for _, row := range result {
-				fmt.Printf("ID: %d, SiteID: %d, Timestamp: %s, Corrected Value: %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
-					row.ID, row.SiteID, row.Timestamp.Format("2006-01-02 15:04:05"), row.CorrectedValue,
-					query.NullFloattoString(row.TempC),
-					query.NullFloattoString(row.SalPSU),
-					query.NullFloattoString(row.ECUS))
-			}
+			printCorrectedQuery(result, format)
 		default:
 			fmt.Println("Invalid type specified. Use 'raw' or 'corrected'.")
 			return
@@ -67,7 +70,58 @@ func init() {
 
 	queryCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	queryCmd.Flags().StringP("type", "t", "", "Type of data to query (raw or corrected)")
+	queryCmd.Flags().String("from", "", "Start timestamp filter")
+	queryCmd.Flags().String("to", "", "End timestamp filter")
+	queryCmd.Flags().StringP("logger", "l", "", "Logger ID or name for raw data")
+	queryCmd.Flags().Int("limit", 0, "Maximum rows to return")
+	queryCmd.Flags().String("format", "table", "Output format: table, csv, or json")
 
 	queryCmd.MarkFlagRequired("site")
 	queryCmd.MarkFlagRequired("type")
+}
+
+func printRawQuery(rows []query.LoggerDataRow, format string) {
+	switch format {
+	case "json":
+		_ = json.NewEncoder(os.Stdout).Encode(rows)
+	case "csv":
+		w := csv.NewWriter(os.Stdout)
+		defer w.Flush()
+		w.Write([]string{"id", "logger_id", "timestamp", "level_m", "temp_c", "sal_psu", "ec_us"})
+		for _, row := range rows {
+			w.Write([]string{strconv.Itoa(row.ID), strconv.Itoa(row.LoggerID), row.Timestamp.Format("2006-01-02 15:04:05"), fmt.Sprintf("%.4f", row.LevelM), query.NullFloattoString(row.TempC), query.NullFloattoString(row.SalPSU), query.NullFloattoString(row.ECUS)})
+		}
+	default:
+		fmt.Println("Logger Data:")
+		for _, row := range rows {
+			fmt.Printf("ID: %d, LoggerID: %d, Timestamp: %s, Level(m): %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
+				row.ID, row.LoggerID, row.Timestamp.Format("2006-01-02 15:04:05"), row.LevelM,
+				query.NullFloattoString(row.TempC),
+				query.NullFloattoString(row.SalPSU),
+				query.NullFloattoString(row.ECUS))
+		}
+	}
+}
+
+func printCorrectedQuery(rows []query.CorrectedDataRow, format string) {
+	switch format {
+	case "json":
+		_ = json.NewEncoder(os.Stdout).Encode(rows)
+	case "csv":
+		w := csv.NewWriter(os.Stdout)
+		defer w.Flush()
+		w.Write([]string{"id", "site_id", "timestamp", "corrected_value", "temp_c", "sal_psu", "ec_us"})
+		for _, row := range rows {
+			w.Write([]string{strconv.Itoa(row.ID), strconv.Itoa(row.SiteID), row.Timestamp.Format("2006-01-02 15:04:05"), fmt.Sprintf("%.4f", row.CorrectedValue), query.NullFloattoString(row.TempC), query.NullFloattoString(row.SalPSU), query.NullFloattoString(row.ECUS)})
+		}
+	default:
+		fmt.Println("Corrected Data:")
+		for _, row := range rows {
+			fmt.Printf("ID: %d, SiteID: %d, Timestamp: %s, Corrected Value: %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
+				row.ID, row.SiteID, row.Timestamp.Format("2006-01-02 15:04:05"), row.CorrectedValue,
+				query.NullFloattoString(row.TempC),
+				query.NullFloattoString(row.SalPSU),
+				query.NullFloattoString(row.ECUS))
+		}
+	}
 }

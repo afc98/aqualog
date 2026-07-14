@@ -221,8 +221,6 @@ func ComputeCorrectedRows(
 
 ) ([]CorrectedRow, error) {
 
-
-
 	windows, err := buildValidWindows(events)
 
 	if err != nil {
@@ -231,15 +229,9 @@ func ComputeCorrectedRows(
 
 	}
 
-
-
 	var out []CorrectedRow
 
-
-
 	for _, w := range windows {
-
-
 
 		rawWin := filterRawToWindow(raw, w)
 
@@ -249,75 +241,21 @@ func ComputeCorrectedRows(
 
 		}
 
+		interval := loggerInterval(rawWin)
 
+		manualWin := filterManualToExtendedWindow(manual, w, interval)
 
-						interval := loggerInterval(rawWin)
+		segments := buildOffsetSegments(rawWin, manualWin, interval, w)
 
+		if len(segments) == 0 {
 
+			continue // No segments to process for this window
 
-				
+		}
 
+		segIdx := 0
 
-
-						manualWin := filterManualToExtendedWindow(manual, w, interval)
-
-
-
-				
-
-
-
-								segments := buildOffsetSegments(rawWin, manualWin, interval, w)
-
-
-
-				
-
-
-
-								if len(segments) == 0 {
-
-
-
-				
-
-
-
-									continue // No segments to process for this window
-
-
-
-				
-
-
-
-								}
-
-
-
-				
-
-
-
-						
-
-
-
-				
-
-
-
-								segIdx := 0
-
-
-
-				
-
-
-
-								for _, r := range rawWin {
-
-
+		for _, r := range rawWin {
 
 			for segIdx+1 < len(segments) &&
 
@@ -327,8 +265,6 @@ func ComputeCorrectedRows(
 
 			}
 
-
-
 			seg := segments[segIdx]
 
 			if r.Timestamp.Before(seg.Start) || !r.Timestamp.Before(seg.End) {
@@ -337,29 +273,24 @@ func ComputeCorrectedRows(
 
 			}
 
-
-
 			out = append(out, CorrectedRow{
 
-				RawID:     r.ID,
+				RawID: r.ID,
 
 				Timestamp: r.Timestamp,
 
-				Value:     r.RawValue + seg.Offset,
+				Value: r.RawValue + seg.Offset,
 
-				TempC:     r.TempC,
+				TempC: r.TempC,
 
-				SalPSU:    r.SalPSU,
+				SalPSU: r.SalPSU,
 
-				ECUS:      r.ECUS,
-
+				ECUS: r.ECUS,
 			})
 
 		}
 
 	}
-
-
 
 	return out, nil
 

@@ -83,3 +83,33 @@ func List() ([]Project, error) {
 
 	return projects, nil
 }
+
+func Update(id int, name string, description string) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+
+	if name != "" {
+		if _, err := database.Exec(`UPDATE projects SET name = ? WHERE id = ?`, name, id); err != nil {
+			return err
+		}
+	}
+	if description != "" {
+		if _, err := database.Exec(`UPDATE projects SET description = ? WHERE id = ?`, description, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func Remove(id int) error {
+	database, err := db.GetDB()
+	if err != nil {
+		return fmt.Errorf("database error: %w", err)
+	}
+	defer database.Close()
+	_, err = database.Exec(`DELETE FROM projects WHERE id = ?`, id)
+	return err
+}

@@ -27,7 +27,18 @@ type CorrectedDataRow struct {
 	ECUS           sql.NullFloat64
 }
 
+type Options struct {
+	From     string
+	To       string
+	LoggerID int
+	Limit    int
+}
+
 func QueryLoggerData(siteID int) ([]LoggerDataRow, error) {
+	return QueryLoggerDataWithOptions(siteID, Options{})
+}
+
+func QueryLoggerDataWithOptions(siteID int, opts Options) ([]LoggerDataRow, error) {
 
 	dbConn, err := db.GetDB()
 	if err != nil {
@@ -35,14 +46,33 @@ func QueryLoggerData(siteID int) ([]LoggerDataRow, error) {
 	}
 	defer dbConn.Close()
 
-	rows, err := dbConn.Query(`
+	sqlText := `
 	SELECT id, logger_id, timestamp, level_m, temp_c, sal_psu, ec_us
 	FROM logger_data
 	WHERE logger_id IN (
 		SELECT id FROM loggers WHERE site_id = ?
 	)
-	ORDER BY timestamp ASC;
-	`, siteID)
+	`
+	args := []any{siteID}
+	if opts.LoggerID > 0 {
+		sqlText += " AND logger_id = ?"
+		args = append(args, opts.LoggerID)
+	}
+	if opts.From != "" {
+		sqlText += " AND timestamp >= ?"
+		args = append(args, opts.From)
+	}
+	if opts.To != "" {
+		sqlText += " AND timestamp <= ?"
+		args = append(args, opts.To)
+	}
+	sqlText += " ORDER BY timestamp ASC"
+	if opts.Limit > 0 {
+		sqlText += " LIMIT ?"
+		args = append(args, opts.Limit)
+	}
+
+	rows, err := dbConn.Query(sqlText, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query logger_data: %w", err)
 	}
@@ -61,6 +91,10 @@ func QueryLoggerData(siteID int) ([]LoggerDataRow, error) {
 }
 
 func QueryCorrectedData(siteID int) ([]CorrectedDataRow, error) {
+	return QueryCorrectedDataWithOptions(siteID, Options{})
+}
+
+func QueryCorrectedDataWithOptions(siteID int, opts Options) ([]CorrectedDataRow, error) {
 
 	dbConn, err := db.GetDB()
 	if err != nil {
@@ -68,12 +102,27 @@ func QueryCorrectedData(siteID int) ([]CorrectedDataRow, error) {
 	}
 	defer dbConn.Close()
 
-	rows, err := dbConn.Query(`
+	sqlText := `
 	SELECT id, site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
 	FROM corrected_data
 	WHERE site_id = ?
-	ORDER BY timestamp ASC;
-	`, siteID)
+	`
+	args := []any{siteID}
+	if opts.From != "" {
+		sqlText += " AND timestamp >= ?"
+		args = append(args, opts.From)
+	}
+	if opts.To != "" {
+		sqlText += " AND timestamp <= ?"
+		args = append(args, opts.To)
+	}
+	sqlText += " ORDER BY timestamp ASC"
+	if opts.Limit > 0 {
+		sqlText += " LIMIT ?"
+		args = append(args, opts.Limit)
+	}
+
+	rows, err := dbConn.Query(sqlText, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query corrected_data: %w", err)
 	}

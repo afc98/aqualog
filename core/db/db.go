@@ -51,6 +51,10 @@ func dbPathFromExecutable() (string, error) {
 	return filepath.Join(exeDir, ".aqualog", "aqualog.db"), nil
 }
 
+func Path() (string, error) {
+	return dbPathFromExecutable()
+}
+
 func applySchema(db *sql.DB) error {
 	schemaBytes, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {

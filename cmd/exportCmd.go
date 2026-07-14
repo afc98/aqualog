@@ -19,9 +19,16 @@ var exportCmd = &cobra.Command{
 			fmt.Println("Site not found:", err)
 			return
 		}
+		from, _ := cmd.Flags().GetString("from")
+		to, _ := cmd.Flags().GetString("to")
+		format, _ := cmd.Flags().GetString("format")
 
 		fmt.Println("Exporting data...")
-		err = export.ExportData(siteID, fileName)
+		err = export.ExportDataWithOptions(siteID, fileName, export.Options{
+			From:   from,
+			To:     to,
+			Format: format,
+		})
 		if err != nil {
 			fmt.Printf("Failed to export logger data for site %d: %v\n", siteID, err)
 			return
@@ -35,6 +42,9 @@ func init() {
 
 	exportCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	exportCmd.Flags().StringP("file", "f", "", "Output file")
+	exportCmd.Flags().String("from", "", "Start timestamp filter in RFC3339 format")
+	exportCmd.Flags().String("to", "", "End timestamp filter in RFC3339 format")
+	exportCmd.Flags().String("format", "csv", "Output format: csv or json")
 
 	exportCmd.MarkFlagRequired("site")
 	exportCmd.MarkFlagRequired("file")

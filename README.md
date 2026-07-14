@@ -1,35 +1,43 @@
 # aqualog
 
-A command-line tool for managing environmental data logger records from multiple sources (Aquaread, Solinst, and In-Situ). It provides a hierarchical data model for organising projects, sites, loggers, and their associated time-series data and events.
+A command-line tool for managing environmental data logger records from multiple sources, including Aquaread, Solinst, and In-Situ. Aqualog stores projects, sites, loggers, imported time-series data, logger events, and manual water-level readings in a local SQLite database, then uses those records to process, query, plot, and export corrected water-level data.
 
 ## Features
 
 ### Data Management
 
-- **Project Management**: Create and manage projects containing multiple sites
-- **Site Management**: Organise logger sites within projects with geographic coordinates
-- **Logger Management**: Register and manage data loggers at each site
-- **Logger Events**: Track logger installation, maintenance, movement, and removal events
-- **Manual Readings**: Record manual water level measurements
+- **Project Management**: Create, list, update, and remove monitoring projects.
+- **Site Management**: Create, list, update, and remove sites within projects.
+- **Logger Management**: Register, list, update, and remove loggers at each site.
+- **Logger Events**: Track logger installation, maintenance, movement, and removal events.
+- **Manual Readings**: Record, update, list, and remove manual water-level measurements.
 
-### Data Import and Processing
+### Data Import, QA, and Processing
 
-- **Data Import**: Import compensated logger data from Aquaread, Solinst or In-Situ formatted text files
-- **Data Processing**: Process and analyse logger time-series data, including elevation correction
+- **Data Import**: Import compensated logger data from Aquaread, Solinst, or In-Situ files.
+- **Batch Import**: Import multiple files from a directory with `import-dir`.
+- **Imported File Management**: List imported files and remove an imported file with its raw rows.
+- **QA Checks**: Summarise site status, validate processing readiness, and detect timestamp gaps.
+- **Data Processing**: Apply manual-reading corrections to logger time-series data.
 
-### Visualisation
+### Output and Diagnostics
 
-- **Data Visualisation**: Generate  plots of logger data across multiple series
+- **Querying**: Query raw or corrected data with optional date, logger, limit, CSV, JSON, or table output.
+- **Export**: Export processed data as CSV or JSON, with optional date filters.
+- **Visualisation**: Generate plots of logger data across supported series.
+- **Diagnostics**: Inspect database path and runtime health with `info` and `doctor`.
 
 ## Installation
 
 ### Prerequisites
 
-- Go 1.25.1 or higher (minimum tested version)
+- Go 1.25.1 or higher
 - SQLite3
 
 ### Build from Source
-For Windows
+
+For Windows:
+
 ```bash
 git clone https://github.com/afc98/aqualog.git
 cd aqualog
@@ -37,6 +45,7 @@ go build -o aqualog.exe ./
 ```
 
 For Linux:
+
 ```bash
 git clone https://github.com/afc98/aqualog.git
 cd aqualog
@@ -45,21 +54,22 @@ go build -o aqualog ./
 
 ## Structure
 
-Aqualog stores information in a hierarchical system as described below:
+Aqualog stores information in a hierarchical system:
 
-```
+```text
 Project
 └── Site
     ├── Manual readings
     └── Logger
+        ├── Imported files
         ├── Events
-        └── Time-series Data
-            └── Processed Data
+        └── Time-series data
+            └── Corrected data
 ```
 
 ### Projects
 
-Projects are the highest-level organisational unit in aqualog.
+Projects are the highest-level organisational unit in Aqualog.
 
 ### Sites
 
@@ -67,153 +77,182 @@ Sites belong to projects and represent locations where data loggers are deployed
 
 ### Loggers
 
-Loggers belong to sites and represent individual physical instruments. Multiple loggers (distinguished by model and serial number) can be associated with a single site, allowing logger replacements over time to be tracked.
+Loggers belong to sites and represent physical instruments. Multiple loggers can be associated with one site so replacements can be tracked over time.
 
 ### Events
 
-Events segment logger records within a site (e.g. installation or removal). Each segment can be processed independently so that changes in logger position or datum can be accounted for.
+Events segment logger records within a site. Processing currently recognises:
 
-Supported event types are:
+- `installed`: Logger installation or commissioning.
+- `removed`: Logger removal or decommissioning.
 
-- `installed`: Logger installation or commissioning
-- `removed`: Logger removal or decommissioning
+The following event types can also be entered but are not currently used by processing:
 
-The following event types can also be entered but these are not currently recognised by aqualog's processing:
-
-- `moved`: Change in logger position or reference elevation
-- `other`: Any other event affecting data interpretation
-
+- `moved`: Change in logger position or reference elevation.
+- `other`: Any other event affecting data interpretation.
 
 ### Manual Readings
 
-Manual readings can be added to a site to enable correction of logger depth readings into water elevation. It is intended that manual readings are recorded as water level elevations relative to a common project datum.
+Manual readings are water-level elevations relative to a common project datum. They are used to correct logger depth readings into corrected water levels.
 
 ## Quick Start
 
-The following example demonstrates a typical end-to-end workflow using aqualog, from initial project setup through to plotting processed logger data. Individual commands are then described in more detail below.
+The database is automatically initialised on first run at `.aqualog/aqualog.db` beside the executable.
 
-In this example, a new project is created, a monitoring site and logger are added, installation and removal events are recorded, compensated logger data are imported, manual readings are applied to correct water levels, and the processed results are visualised.
-
-### Initialise the Database
-
-The database is automatically initialised on first run at `~/.aqualog/aqualog.db`.
-
-### Create a Project
+### Check Local Setup
 
 ```bash
-./aqualog project add --name "My Project"
+./aqualog info
+./aqualog doctor
 ```
 
-### List Projects
+### Create and Review a Project
 
 ```bash
+./aqualog project add --name "My Project" --description "Groundwater monitoring"
 ./aqualog project list
+./aqualog project update --project "My Project" --description "Updated notes"
 ```
 
-### Add a Site to a Project
+Remove commands are destructive and require `--confirm`:
 
 ```bash
-./aqualog site add --project "My Project" --name "Site 1" --latitude 45.0 --longitude -120.0
+./aqualog project remove --project "My Project" --confirm
 ```
 
-### List Sites for a Project
+### Add a Site
 
 ```bash
+./aqualog site add --project "My Project" --name "Site 1" --lat 45.0 --lon -120.0
 ./aqualog site list --project "My Project"
+./aqualog site update --site "Site 1" --lat 45.1 --lon -120.1
 ```
 
-### Add a Logger to a Site
+```bash
+./aqualog site remove --site "Site 1" --confirm
+```
+
+### Add a Logger
 
 ```bash
 ./aqualog logger add --site "Site 1" --name "Logger 1" --model "Aquaread LeveLine CTD" --serial 1234567
+./aqualog logger list --site "Site 1"
+./aqualog logger update --logger "Logger 1" --serial 7654321
 ```
-
-### List Loggers for a Site
 
 ```bash
-./aqualog logger list --site "Site 1"
+./aqualog logger remove --logger "Logger 1" --confirm
 ```
 
-### Add an Installation Event to a Logger
+### Add Logger Events
 
 ```bash
 ./aqualog event add --logger "Logger 1" --type installed --time "20250101 09:00:00" --notes "Datalogger installation"
-```
-
-### Add a Removal Event to a Logger
-
-```bash
 ./aqualog event add --logger "Logger 1" --type removed --time "20250301 11:00:00" --notes "Datalogger removed for data collection"
-```
-
-### List Events for a Logger
-
-```bash
 ./aqualog event list --logger "Logger 1"
 ```
 
-### Update an Event
-
-The type, time, and notes for an event can be updated using the `--type`, `--time`, and `--notes` flags respectively.
-
 ```bash
-./aqualog event update --id 1 --notes "Datalogger installation – logger elevation raised"
-```
-
-### Remove an Event
-
-```bash
+./aqualog event update --id 1 --notes "Logger elevation raised"
 ./aqualog event remove --id 1
 ```
 
-### Add a Manual Reading to a Site
+### Add Manual Readings
 
 ```bash
 ./aqualog manual add --site "Site 1" --waterlevel 1.5 --time "20250101 09:05:00" --notes "Dip 3.5 m bgl"
-```
-
-### List Manual Readings for a Site
-
-```bash
 ./aqualog manual list --site "Site 1"
 ```
 
-### Update a Manual Reading
-
-The water level, time, and notes for a manual reading can be updated using the `--waterlevel`, `--time`, and `--notes` flags respectively.
-
 ```bash
 ./aqualog manual update --id 1 --waterlevel 2.0 --time "20250101 09:05:00" --notes "Dip 4 m bgl"
-```
-
-### Remove a Manual Reading
-
-```bash
 ./aqualog manual remove --id 1
 ```
 
-### Import Compensated Datalogger Data
+### Import Logger Data
 
-Currently supported types are `aquaread`, `solinst`, and `insitu`.
+Supported import types are `aquaread`, `solinst`, and `insitu`.
 
 ```bash
 ./aqualog import --type aquaread --site "Site 1" --logger "Logger 1" --file "path/to/file.tab"
 ```
 
-By default, imports skip records that already exist for the same logger and timestamp. Use `--replace` to overwrite matching timestamp records with values from the imported file.
+By default, imports skip records that already exist for the same logger and timestamp. Use `--replace` to overwrite matching timestamp records:
 
 ```bash
 ./aqualog import --type aquaread --site "Site 1" --logger "Logger 1" --file "path/to/file.tab" --replace
 ```
 
-The import summary reports how many records were inserted, skipped, and replaced. When records are replaced, processed/corrected data for the site are invalidated; run `process` again to regenerate corrected values.
+Import all matching files in a directory:
 
-### Process Data for a Site
+```bash
+./aqualog import-dir --type aquaread --site "Site 1" --logger "Logger 1" --dir "path/to/files" --pattern "*.tab"
+```
 
-Apply elevation corrections using manual readings to the imported data.
+### Manage Imported Files
+
+List imported files and their row counts:
+
+```bash
+./aqualog files list --site "Site 1"
+./aqualog files list --site "Site 1" --logger "Logger 1"
+```
+
+Remove an imported file and its raw rows. This invalidates corrected data for the affected site:
+
+```bash
+./aqualog files remove --id 1 --confirm
+```
+
+### Check Data Quality
+
+Summarise a site's processing state:
+
+```bash
+./aqualog status --site "Site 1"
+```
+
+Validate whether a site is ready to process:
+
+```bash
+./aqualog validate --site "Site 1"
+```
+
+Find gaps in raw logger timestamps. If `--threshold` is omitted, Aqualog uses twice the inferred median interval:
+
+```bash
+./aqualog gaps --site "Site 1"
+./aqualog gaps --site "Site 1" --logger "Logger 1" --threshold 2h
+```
+
+### Process Data
+
+Apply elevation corrections using manual readings:
 
 ```bash
 ./aqualog process --site "Site 1"
+```
+
+### Query Data
+
+Query raw or corrected data:
+
+```bash
+./aqualog query --site "Site 1" --type raw
+./aqualog query --site "Site 1" --type corrected
+```
+
+Filter query output:
+
+```bash
+./aqualog query --site "Site 1" --type raw --logger "Logger 1" --from "2025-01-01T00:00:00Z" --to "2025-03-01T00:00:00Z" --limit 100
+```
+
+Choose output format:
+
+```bash
+./aqualog query --site "Site 1" --type corrected --format csv
+./aqualog query --site "Site 1" --type corrected --format json
 ```
 
 ### Plot Processed Data
@@ -226,9 +265,40 @@ Supported series include level, EC, salinity, and temperature.
 
 ### Export Processed Data
 
+Export corrected data as CSV:
+
 ```bash
 ./aqualog export --site "Site 1" --file "output.csv"
 ```
+
+Export filtered JSON:
+
+```bash
+./aqualog export --site "Site 1" --file "output.json" --format json --from "2025-01-01T00:00:00Z" --to "2025-03-01T00:00:00Z"
+```
+
+## Command Summary
+
+| Command | Purpose |
+| --- | --- |
+| `project add/list/update/remove` | Manage projects |
+| `site add/list/update/remove` | Manage sites |
+| `logger add/list/update/remove` | Manage loggers |
+| `event add/list/update/remove` | Manage logger events |
+| `manual add/list/update/remove` | Manage manual water-level readings |
+| `import` | Import one logger file |
+| `import-dir` | Import multiple logger files from a directory |
+| `files list/remove` | Review or remove imported files |
+| `status` | Summarise site data and processing state |
+| `validate` | Report processing readiness issues |
+| `gaps` | Find timestamp gaps in raw logger data |
+| `process` | Generate corrected data |
+| `query` | Query raw or corrected data |
+| `plot` | Plot site data |
+| `export` | Export processed data |
+| `info` | Show database path and supported import types |
+| `doctor` | Check database and runtime health |
+| `serve` | Start the local HTTP API |
 
 ## HTTP Server API
 
@@ -244,7 +314,7 @@ The default listen address is `127.0.0.1:8080`. Use `--addr` to choose a differe
 ./aqualog serve --addr 127.0.0.1:8080
 ```
 
-Requests and responses use JSON unless an endpoint returns `204 No Content`. Error responses use the following shape:
+Requests and responses use JSON unless an endpoint returns `204 No Content`. Error responses use this shape:
 
 ```json
 {"status":"error","message":"...","code":400}
