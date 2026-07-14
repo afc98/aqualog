@@ -2,3 +2,7 @@ example_data/
 .github/
 aqualog.exe
 .aqualog/
+*.db
+*.csv
+*.tab
+*.xlsx
