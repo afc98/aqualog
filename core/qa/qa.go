@@ -24,6 +24,9 @@ type Status struct {
 	CorrectedStart   sql.NullString
 	CorrectedEnd     sql.NullString
 	CorrectedMissing bool
+	AbsoluteCount    int
+	BaroCount        int
+	BaroCorrected    int
 }
 
 type ValidationIssue struct {
@@ -67,6 +70,9 @@ func SiteStatus(siteID int) (Status, error) {
 		{`SELECT COUNT(*) FROM manual_readings WHERE site_id = ?`, &s.ManualCount},
 		{`SELECT COUNT(*) FROM logger_events WHERE logger_id IN (SELECT id FROM loggers WHERE site_id = ?)`, &s.EventCount},
 		{`SELECT COUNT(*) FROM logger_files WHERE logger_id IN (SELECT id FROM loggers WHERE site_id = ?)`, &s.FileCount},
+		{`SELECT COUNT(*) FROM logger_data WHERE logger_id IN (SELECT id FROM loggers WHERE site_id = ?) AND imported_kind IN ('absolute_pressure_mbar', 'absolute_pressure_kpa', 'absolute_pressure_head_m')`, &s.AbsoluteCount},
+		{`SELECT COUNT(*) FROM logger_data WHERE logger_id IN (SELECT id FROM loggers WHERE site_id = ?) AND imported_kind IN ('barometric_pressure_mbar', 'barometric_pressure_kpa')`, &s.BaroCount},
+		{`SELECT COUNT(*) FROM logger_data WHERE logger_id IN (SELECT id FROM loggers WHERE site_id = ?) AND baro_corrected_m IS NOT NULL`, &s.BaroCorrected},
 	}
 	for _, c := range counts {
 		if err := d.QueryRow(c.query, siteID).Scan(c.dest); err != nil {
@@ -106,6 +112,12 @@ func ValidateSite(siteID int) ([]ValidationIssue, error) {
 	}
 	if status.CorrectedMissing {
 		add("warning", "site has raw data but no corrected data; run process")
+	}
+	if status.AbsoluteCount > 0 && status.BaroCorrected == 0 {
+		add("error", "site has absolute-pressure logger data but no barometric correction")
+	}
+	if status.AbsoluteCount > 0 && status.BaroCount == 0 {
+		add("error", "site has absolute-pressure logger data but no barometric records")
 	}
 
 	d, err := db.GetDB()

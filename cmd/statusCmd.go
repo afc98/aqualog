@@ -26,6 +26,7 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Site: %s (ID %d)\n", s.SiteName, s.SiteID)
 		fmt.Printf("Project: %s (ID %d)\n", s.ProjectName, s.ProjectID)
 		fmt.Printf("Loggers: %d, Files: %d, Events: %d, Manual readings: %d\n", s.LoggerCount, s.FileCount, s.EventCount, s.ManualCount)
+		fmt.Printf("Absolute-pressure rows: %d, Barometric rows: %d, Baro-corrected rows: %d\n", s.AbsoluteCount, s.BaroCount, s.BaroCorrected)
 		fmt.Printf("Raw records: %d", s.RawCount)
 		if s.RawStart.Valid {
 			fmt.Printf(" (%s to %s)", s.RawStart.String, s.RawEnd.String)
