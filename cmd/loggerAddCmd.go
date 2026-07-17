@@ -26,12 +26,14 @@ var loggerAddCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		model, _ := cmd.Flags().GetString("model")
 		serial, _ := cmd.Flags().GetString("serial")
+		role, _ := cmd.Flags().GetString("role")
 
 		lgr, err := logger.Add(logger.AddParams{
 			SiteID: siteID,
 			Name:   name,
 			Model:  model,
 			Serial: serial,
+			Role:   role,
 		})
 		if err != nil {
 			fmt.Println("Failed to add logger:", err)
@@ -39,12 +41,13 @@ var loggerAddCmd = &cobra.Command{
 		}
 
 		fmt.Printf(
-			"Logger added: ID %d (site %d, %s, %s, %s)\n",
+			"Logger added: ID %d (site %d, %s, %s, %s, role: %s)\n",
 			lgr.ID,
 			lgr.SiteID,
 			lgr.Name,
 			lgr.Model,
 			lgr.Serial,
+			lgr.Role,
 		)
 	},
 }
@@ -56,6 +59,7 @@ func init() {
 	loggerAddCmd.Flags().StringP("name", "n", "", "Logger name")
 	loggerAddCmd.Flags().StringP("model", "m", "", "Logger model")
 	loggerAddCmd.Flags().StringP("serial", "S", "", "Serial number")
+	loggerAddCmd.Flags().String("role", "water_level", "Logger role (water_level or barometric)")
 
 	loggerAddCmd.MarkFlagRequired("site")
 	loggerAddCmd.MarkFlagRequired("name")

@@ -43,8 +43,8 @@ var filesListCmd = &cobra.Command{
 			return
 		}
 		for _, f := range rows {
-			fmt.Printf("%d. logger=%s (%d), type=%s, rows=%d, imported=%s, file=%s\n",
-				f.ID, f.Logger, f.LoggerID, f.Type, f.Rows, f.Timestamp.Format(time.RFC3339), f.Path)
+			fmt.Printf("%d. logger=%s (%d), type=%s, kind=%s, unit=%s, rows=%d, imported=%s, file=%s\n",
+				f.ID, f.Logger, f.LoggerID, f.Type, f.Kind, f.Unit, f.Rows, f.Timestamp.Format(time.RFC3339), f.Path)
 		}
 	},
 }

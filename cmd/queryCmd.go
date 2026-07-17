@@ -3,6 +3,7 @@ package cmd
 import (
 	"aqualog/core/db"
 	"aqualog/core/query"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -87,20 +88,46 @@ func printRawQuery(rows []query.LoggerDataRow, format string) {
 	case "csv":
 		w := csv.NewWriter(os.Stdout)
 		defer w.Flush()
-		w.Write([]string{"id", "logger_id", "timestamp", "level_m", "temp_c", "sal_psu", "ec_us"})
+		w.Write([]string{"id", "logger_id", "timestamp", "level_m", "imported_value", "imported_unit", "imported_kind", "baro_corrected_m", "correction_run_id", "temp_c", "sal_psu", "ec_us"})
 		for _, row := range rows {
-			w.Write([]string{strconv.Itoa(row.ID), strconv.Itoa(row.LoggerID), row.Timestamp.Format("2006-01-02 15:04:05"), fmt.Sprintf("%.4f", row.LevelM), query.NullFloattoString(row.TempC), query.NullFloattoString(row.SalPSU), query.NullFloattoString(row.ECUS)})
+			w.Write([]string{strconv.Itoa(row.ID), strconv.Itoa(row.LoggerID), row.Timestamp.Format("2006-01-02 15:04:05"), fmt.Sprintf("%.4f", row.LevelM), nullFloat(row.ImportedValue), nullString(row.ImportedUnit), nullString(row.ImportedKind), nullFloat(row.BaroCorrectedM), nullInt(row.CorrectionRun), query.NullFloattoString(row.TempC), query.NullFloattoString(row.SalPSU), query.NullFloattoString(row.ECUS)})
 		}
 	default:
 		fmt.Println("Logger Data:")
 		for _, row := range rows {
-			fmt.Printf("ID: %d, LoggerID: %d, Timestamp: %s, Level(m): %.2f, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
+			fmt.Printf("ID: %d, LoggerID: %d, Timestamp: %s, Level(m): %.2f, Imported: %s %s (%s), BaroCorrected(m): %s, Run: %s, Temp(C): %s, Sal(PSU): %s, EC(uS): %s\n",
 				row.ID, row.LoggerID, row.Timestamp.Format("2006-01-02 15:04:05"), row.LevelM,
+				nullFloat(row.ImportedValue),
+				nullString(row.ImportedUnit),
+				nullString(row.ImportedKind),
+				nullFloat(row.BaroCorrectedM),
+				nullInt(row.CorrectionRun),
 				query.NullFloattoString(row.TempC),
 				query.NullFloattoString(row.SalPSU),
 				query.NullFloattoString(row.ECUS))
 		}
 	}
+}
+
+func nullFloat(n sql.NullFloat64) string {
+	if n.Valid {
+		return fmt.Sprintf("%.4f", n.Float64)
+	}
+	return ""
+}
+
+func nullString(n sql.NullString) string {
+	if n.Valid {
+		return n.String
+	}
+	return ""
+}
+
+func nullInt(n sql.NullInt64) string {
+	if n.Valid {
+		return strconv.FormatInt(n.Int64, 10)
+	}
+	return ""
 }
 
 func printCorrectedQuery(rows []query.CorrectedDataRow, format string) {

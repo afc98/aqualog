@@ -37,11 +37,12 @@ var loggerListCmd = &cobra.Command{
 
 		for _, l := range loggers {
 			fmt.Printf(
-				" %d. %s (model: %s, serial: %s)\n",
+				" %d. %s (model: %s, serial: %s, role: %s)\n",
 				l.ID,
 				l.Name,
 				l.Model,
 				l.Serial,
+				l.Role,
 			)
 		}
 	},

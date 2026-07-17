@@ -14,6 +14,8 @@ type LoggerFile struct {
 	Timestamp time.Time
 	Path      string
 	Type      string
+	Kind      string
+	Unit      string
 	Rows      int
 }
 
@@ -31,7 +33,7 @@ func List(siteID int, loggerID int) ([]LoggerFile, error) {
 		args = append(args, loggerID)
 	}
 	rows, err := d.Query(`
-		SELECT f.id, f.logger_id, l.name, f.timestamp, f.file, f.type,
+		SELECT f.id, f.logger_id, l.name, f.timestamp, f.file, f.type, f.measurement_kind, f.measurement_unit,
 			(SELECT COUNT(*) FROM logger_data d WHERE d.logger_file_id = f.id)
 		FROM logger_files f
 		JOIN loggers l ON l.id = f.logger_id
@@ -48,7 +50,9 @@ func List(siteID int, loggerID int) ([]LoggerFile, error) {
 		var f LoggerFile
 		var ts string
 		var typ sql.NullString
-		if err := rows.Scan(&f.ID, &f.LoggerID, &f.Logger, &ts, &f.Path, &typ, &f.Rows); err != nil {
+		var kind sql.NullString
+		var unit sql.NullString
+		if err := rows.Scan(&f.ID, &f.LoggerID, &f.Logger, &ts, &f.Path, &typ, &kind, &unit, &f.Rows); err != nil {
 			return nil, err
 		}
 		t, err := time.Parse(time.RFC3339, ts)
@@ -61,6 +65,12 @@ func List(siteID int, loggerID int) ([]LoggerFile, error) {
 		f.Timestamp = t
 		if typ.Valid {
 			f.Type = typ.String
+		}
+		if kind.Valid {
+			f.Kind = kind.String
+		}
+		if unit.Valid {
+			f.Unit = unit.String
 		}
 		out = append(out, f)
 	}

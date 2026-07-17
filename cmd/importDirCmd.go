@@ -3,6 +3,7 @@ package cmd
 import (
 	"aqualog/core/db"
 	"aqualog/core/importer"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -17,6 +18,9 @@ var importDirCmd = &cobra.Command{
 		dir, _ := cmd.Flags().GetString("dir")
 		pattern, _ := cmd.Flags().GetString("pattern")
 		replaceExisting, _ := cmd.Flags().GetBool("replace")
+		role, _ := cmd.Flags().GetString("role")
+		measurementKind, _ := cmd.Flags().GetString("measurement-kind")
+		dateOrder, _ := cmd.Flags().GetString("date-order")
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -43,14 +47,25 @@ var importDirCmd = &cobra.Command{
 		}
 		totalInserted, totalSkipped, totalReplaced, failed := 0, 0, 0, 0
 		for _, filePath := range matches {
-			meta, recs, err := importer.ParseLoggerFile(fileType, filePath)
+			options := importer.ImportOptions{
+				ReplaceExisting: replaceExisting,
+				Role:            role,
+				MeasurementKind: measurementKind,
+				DateOrder:       dateOrder,
+			}
+			meta, recs, err := importer.ParseLoggerFileWithOptions(fileType, filePath, options)
 			if err != nil {
 				failed++
 				fmt.Printf("FAILED %s: %v\n", filePath, err)
 				continue
 			}
-			result, err := importer.ImportRecords(meta, recs, siteID, loggerID, filePath, fileType, importer.ImportOptions{ReplaceExisting: replaceExisting})
+			result, err := importer.ImportRecords(meta, recs, siteID, loggerID, filePath, fileType, options)
 			if err != nil {
+				if errors.Is(err, importer.ErrFileAlreadyRecorded) {
+					totalSkipped += len(recs)
+					fmt.Printf("SKIP %s: file already recorded for logger\n", filePath)
+					continue
+				}
 				failed++
 				fmt.Printf("FAILED %s: %v\n", filePath, err)
 				continue
@@ -70,6 +85,9 @@ func init() {
 	importDirCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	importDirCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	importDirCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
+	importDirCmd.Flags().String("role", "", "Logger role (water_level or barometric); inferred when omitted")
+	importDirCmd.Flags().String("measurement-kind", "", "Override parsed measurement kind")
+	importDirCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	importDirCmd.Flags().String("pattern", "*", "File glob pattern within the directory")
 	importDirCmd.Flags().Bool("replace", false, "Replace existing records for matching logger timestamps")
 	importDirCmd.MarkFlagRequired("dir")

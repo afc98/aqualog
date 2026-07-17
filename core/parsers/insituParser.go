@@ -7,11 +7,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // ParseInsitu parses a CSV file from an In-Situ datalogger.
 func ParseInsitu(path string) (*ParsedFile, error) {
+	return ParseInsituWithOptions(path, DateOptions{DateOrder: "auto"})
+}
+
+func ParseInsituWithOptions(path string, opts DateOptions) (*ParsedFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -76,14 +79,16 @@ func ParseInsitu(path string) (*ParsedFile, error) {
 		return nil, errors.New("insitu: could not locate data header (Date and Time...)")
 	}
 
-	return parseInsituData(lines, headerIndex, md)
+	return parseInsituData(lines, headerIndex, md, normalizeDateOrder(opts.DateOrder))
 }
 
-func parseInsituData(lines []string, headerIndex int, md Metadata) (*ParsedFile, error) {
+func parseInsituData(lines []string, headerIndex int, md Metadata, dateOrder string) (*ParsedFile, error) {
 	headerLine := lines[headerIndex]
 	headerCols := splitCSVInsitu(headerLine)
 
 	idxTimestamp := indexOfContainsInsitu(headerCols, "date")
+	idxPressure := indexOfContainsInsitu(headerCols, "pressure (kpa)")
+	idxBaro := indexOfContainsInsitu(headerCols, "barometric pressure")
 	idxLevel := indexOfContainsInsitu(headerCols, "depth")
 	if idxLevel == -1 {
 		idxLevel = indexOfContainsInsitu(headerCols, "level")
@@ -94,12 +99,19 @@ func parseInsituData(lines []string, headerIndex int, md Metadata) (*ParsedFile,
 	idxEC := indexOfContainsInsitu(headerCols, "conductivity")
 	idxSal := indexOfContainsInsitu(headerCols, "salinity")
 
-	if idxTimestamp == -1 || idxLevel == -1 || idxTemp == -1 {
-		return nil, fmt.Errorf("insitu: required columns missing (date, depth/level, temperature) - found: %v", headerCols)
+	if idxTimestamp == -1 || idxTemp == -1 || (idxLevel == -1 && idxPressure == -1 && idxBaro == -1) {
+		return nil, fmt.Errorf("insitu: required columns missing (date, pressure/depth/barometric pressure, temperature) - found: %v", headerCols)
 	}
+	if dateOrder == "auto" {
+		detected, err := detectInsituDateOrder(lines[headerIndex+1:], idxTimestamp)
+		if err != nil {
+			return nil, err
+		}
+		dateOrder = detected
+	}
+	layouts := slashDateLayouts(dateOrder, true)
 
 	var records []Record
-	layout := "02/01/2006 15:04:05"
 
 	for _, line := range lines[headerIndex+1:] {
 		if line == "" {
@@ -107,24 +119,42 @@ func parseInsituData(lines []string, headerIndex int, md Metadata) (*ParsedFile,
 		}
 
 		parts := splitCSVInsitu(line)
-		if len(parts) <= idxTimestamp || len(parts) <= idxLevel || len(parts) <= idxTemp {
+		if len(parts) <= idxTimestamp || len(parts) <= idxTemp {
 			continue
 		}
 
 		tsStr := parts[idxTimestamp]
-		ts, err := time.Parse(layout, tsStr)
+		ts, err := parseTimeWithLayouts(tsStr, layouts)
 		if err != nil {
 			continue
 		}
 
-		level := parseFloatInsitu(parts[idxLevel])
+		valueIdx := idxLevel
+		unit := "m"
+		kind := "manufacturer_compensated_depth_m"
+		if idxBaro != -1 {
+			valueIdx = idxBaro
+			unit = "kPa"
+			kind = "barometric_pressure_kpa"
+		} else if idxPressure != -1 {
+			valueIdx = idxPressure
+			unit = "kPa"
+			kind = "absolute_pressure_kpa"
+		}
+		if valueIdx == -1 || len(parts) <= valueIdx {
+			continue
+		}
+		level := parseFloatInsitu(parts[valueIdx])
 		temp := parseFloatInsitu(parts[idxTemp])
 
 		rec := Record{
-			Timestamp: ts,
-			LevelM:    level,
-			TempC:     temp,
-			Zero:      0,
+			Timestamp:       ts,
+			LevelM:          level,
+			TempC:           temp,
+			Zero:            0,
+			ImportedValue:   level,
+			ImportedUnit:    unit,
+			MeasurementKind: kind,
 		}
 
 		if idxEC != -1 && idxEC < len(parts) {
@@ -141,6 +171,22 @@ func parseInsituData(lines []string, headerIndex int, md Metadata) (*ParsedFile,
 		Metadata: md,
 		Records:  records,
 	}, nil
+}
+
+func detectInsituDateOrder(lines []string, dateIdx int) (string, error) {
+	var dates []string
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		parts := splitCSVInsitu(line)
+		if dateIdx >= len(parts) {
+			continue
+		}
+		date := strings.Split(strings.TrimSpace(parts[dateIdx]), " ")[0]
+		dates = append(dates, date)
+	}
+	return detectSlashDateOrder(dates, "In-Situ")
 }
 
 func splitCSVInsitu(s string) []string {

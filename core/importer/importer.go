@@ -23,6 +23,9 @@ type ImportResult struct {
 
 type ImportOptions struct {
 	ReplaceExisting bool
+	Role            string
+	MeasurementKind string
+	DateOrder       string
 }
 
 type File struct {
@@ -32,27 +35,31 @@ type File struct {
 }
 
 func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Record, error) {
+	return ParseLoggerFileWithOptions(fileType, filePath, ImportOptions{})
+}
+
+func ParseLoggerFileWithOptions(fileType, filePath string, options ImportOptions) (parsers.Metadata, []parsers.Record, error) {
 	if _, err := os.Stat(filePath); err != nil {
 		return parsers.Metadata{}, nil, err
 	}
 
 	switch fileType {
 	case "aquaread":
-		data, err := parsers.ParseAquaread(filePath)
+		data, err := parsers.ParseAquareadWithOptions(filePath, parsers.DateOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
 		return data.Metadata, data.Records, nil
 
 	case "solinst":
-		data, err := parsers.ParseSolinst(filePath)
+		data, err := parsers.ParseSolinstWithOptions(filePath, parsers.SolinstOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
 		return data.Metadata, data.Records, nil
 
 	case "insitu":
-		data, err := parsers.ParseInsitu(filePath)
+		data, err := parsers.ParseInsituWithOptions(filePath, parsers.DateOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
@@ -92,12 +99,14 @@ func insertLoggerFileTx(
 	loggerID int,
 	filePath string,
 	fileType string,
+	measurementKind string,
+	measurementUnit string,
 ) (int, error) {
 
 	res, err := tx.Exec(
-		`INSERT INTO logger_files (logger_id, file, type)
-		 VALUES (?, ?, ?)`,
-		loggerID, filePath, fileType,
+		`INSERT INTO logger_files (logger_id, file, type, measurement_kind, measurement_unit)
+		 VALUES (?, ?, ?, ?, ?)`,
+		loggerID, filePath, fileType, measurementKind, measurementUnit,
 	)
 	if err != nil {
 		return 0, err
@@ -109,6 +118,13 @@ func insertLoggerFileTx(
 	}
 
 	return int(id), nil
+}
+
+func firstMeasurement(recs []parsers.Record) (string, string) {
+	if len(recs) == 0 {
+		return "", ""
+	}
+	return recs[0].MeasurementKind, recs[0].ImportedUnit
 }
 
 func ImportRecords(
@@ -123,7 +139,8 @@ func ImportRecords(
 
 	defer utils.TimeTrack(time.Now(), "ImportRecords")
 
-	// Advisory pre-flight check
+	// Advisory pre-flight check for explicitly selected loggers. Auto-detected
+	// loggers are checked after the logger has been resolved or created.
 	if loggerID != -1 {
 		exists, err := LoggerFileExists(loggerID, filePath)
 		if err != nil {
@@ -147,6 +164,13 @@ func ImportRecords(
 	defer tx.Rollback()
 
 	result := &ImportResult{}
+	role := options.Role
+	if role == "" {
+		role = "water_level"
+		if len(recs) > 0 && isBarometricKind(recs[0].MeasurementKind) {
+			role = "barometric"
+		}
+	}
 
 	// Resolve or create logger (inside transaction)
 	if loggerID == -1 {
@@ -158,9 +182,9 @@ func ImportRecords(
 
 		if err == sql.ErrNoRows {
 			res, err := tx.Exec(`
-				INSERT INTO loggers (site_id, name, serial_number)
-				VALUES (?, ?, ?)
-			`, siteID, meta.SiteIdent, meta.SerialNumber)
+				INSERT INTO loggers (site_id, name, serial_number, role)
+				VALUES (?, ?, ?, ?)
+			`, siteID, meta.SiteIdent, meta.SerialNumber, role)
 			if err != nil {
 				return nil, err
 			}
@@ -171,15 +195,31 @@ func ImportRecords(
 			return nil, err
 		}
 	}
+	exists, err := LoggerFileExists(loggerID, filePath)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrFileAlreadyRecorded
+	}
+	if _, err := tx.Exec(`UPDATE loggers SET role = ? WHERE id = ?`, role, loggerID); err != nil {
+		return nil, err
+	}
 
 	result.LoggerID = loggerID
 
 	// Insert logger_files FIRST
+	kind, unit := firstMeasurement(recs)
+	if options.MeasurementKind != "" {
+		kind = options.MeasurementKind
+	}
 	loggerFileID, err := insertLoggerFileTx(
 		tx,
 		loggerID,
 		filePath,
 		fileType,
+		kind,
+		unit,
 	)
 	if err != nil {
 		return nil, err
@@ -205,21 +245,35 @@ func ImportRecords(
 				logger_file_id,
 				timestamp,
 				level_m,
+				imported_value,
+				imported_unit,
+				imported_kind,
 				temp_c,
 				sal_psu,
 				ec_us
 			) VALUES
 		`, insertVerb)
 
-		args := make([]any, 0, (end-i)*7)
+		args := make([]any, 0, (end-i)*10)
 
 		for _, rec := range recs[i:end] {
-			query += "(?, ?, ?, ?, ?, ?, ?),"
+			recKind := rec.MeasurementKind
+			if options.MeasurementKind != "" {
+				recKind = options.MeasurementKind
+			}
+			level := rec.LevelM
+			if isBarometricKind(recKind) || isAbsolutePressureKind(recKind) {
+				level = 0
+			}
+			query += "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
 			args = append(args,
 				loggerID,
 				loggerFileID,
 				rec.Timestamp,
-				rec.LevelM,
+				level,
+				rec.ImportedValue,
+				rec.ImportedUnit,
+				recKind,
 				rec.TempC,
 				rec.SalPSU,
 				rec.EC,
@@ -239,6 +293,9 @@ func ImportRecords(
 				ON CONFLICT(logger_id, timestamp) DO UPDATE SET
 					logger_file_id = excluded.logger_file_id,
 					level_m = excluded.level_m,
+					imported_value = excluded.imported_value,
+					imported_unit = excluded.imported_unit,
+					imported_kind = excluded.imported_kind,
 					temp_c = excluded.temp_c,
 					sal_psu = excluded.sal_psu,
 					ec_us = excluded.ec_us
@@ -301,4 +358,12 @@ func countExistingRecordsTx(tx *sql.Tx, loggerID int, recs []parsers.Record) (in
 	}
 
 	return count, nil
+}
+
+func isBarometricKind(kind string) bool {
+	return kind == "barometric_pressure_mbar" || kind == "barometric_pressure_kpa"
+}
+
+func isAbsolutePressureKind(kind string) bool {
+	return kind == "absolute_pressure_mbar" || kind == "absolute_pressure_kpa" || kind == "absolute_pressure_head_m"
 }

@@ -21,11 +21,12 @@ var loggerUpdateCmd = &cobra.Command{
 		name, _ := cmd.Flags().GetString("name")
 		model, _ := cmd.Flags().GetString("model")
 		serial, _ := cmd.Flags().GetString("serial")
-		if name == "" && model == "" && serial == "" {
+		role, _ := cmd.Flags().GetString("role")
+		if name == "" && model == "" && serial == "" && role == "" {
 			fmt.Println("Nothing to update.")
 			return
 		}
-		if err := logger.Update(id, name, model, serial); err != nil {
+		if err := logger.Update(id, name, model, serial, role); err != nil {
 			fmt.Println("Failed to update logger:", err)
 			return
 		}
@@ -39,5 +40,6 @@ func init() {
 	loggerUpdateCmd.Flags().StringP("name", "n", "", "New logger name")
 	loggerUpdateCmd.Flags().StringP("model", "m", "", "New logger model")
 	loggerUpdateCmd.Flags().StringP("serial", "S", "", "New logger serial")
+	loggerUpdateCmd.Flags().String("role", "", "New logger role (water_level or barometric)")
 	loggerUpdateCmd.MarkFlagRequired("logger")
 }
