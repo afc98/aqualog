@@ -17,6 +17,7 @@ A command-line tool for managing environmental data logger records from multiple
 - **Data Import**: Import compensated logger data from Aquaread, Solinst, or In-Situ files.
 - **Batch Import**: Import multiple files from a directory with `import-dir`.
 - **Imported File Management**: List imported files and remove an imported file with its raw rows.
+- **Barometric Correction**: Import barometric logger files, assign barologgers, and correct uncompensated pressure data.
 - **QA Checks**: Summarise site status, validate processing readiness, and detect timestamp gaps.
 - **Data Processing**: Apply manual-reading corrections to logger time-series data.
 
@@ -183,6 +184,12 @@ By default, imports skip records that already exist for the same logger and time
 ./aqualog import --type aquaread --site "Site 1" --logger "Logger 1" --file "path/to/file.tab" --replace
 ```
 
+For files with slash dates, Aqualog attempts to detect the date order. If the file is ambiguous, specify `--date-order dmy` or `--date-order mdy`:
+
+```bash
+./aqualog import --type solinst --site "Site 1" --logger "Logger 1" --file "path/to/file.csv" --date-order dmy
+```
+
 Import all matching files in a directory:
 
 ```bash
@@ -202,6 +209,46 @@ Remove an imported file and its raw rows. This invalidates corrected data for th
 
 ```bash
 ./aqualog files remove --id 1 --confirm
+```
+
+### Barometric Correction
+
+Uncompensated pressure files are imported with their original measurement kind and unit. Barometric files can be imported through the `baro` command group or by using `import --role barometric`.
+
+```bash
+./aqualog baro import --type aquaread --site "Site 1" --logger "Barologger 1" --file "path/to/baro.tab"
+```
+
+Batch-import barometric files from a directory:
+
+```bash
+./aqualog baro import-dir --type solinst --site "Site 1" --dir "path/to/baro-files" --pattern "*.csv" --date-order mdy
+```
+
+Assign a default barologger to a site or project:
+
+```bash
+./aqualog baro assign --site "Site 1" --barologger "Barologger 1"
+./aqualog baro assign --project "My Project" --barologger "Barologger 1"
+```
+
+Apply barometric correction to one site or logger:
+
+```bash
+./aqualog baro correct --site "Site 1"
+./aqualog baro correct --site "Site 1" --logger "Logger 1" --density freshwater
+```
+
+Batch-correct all sites in a project using site or project barologger assignments:
+
+```bash
+./aqualog baro correct-batch --project "My Project"
+```
+
+Review assignments and recent correction runs:
+
+```bash
+./aqualog baro status --site "Site 1"
 ```
 
 ### Check Data Quality
@@ -255,12 +302,15 @@ Choose output format:
 ./aqualog query --site "Site 1" --type corrected --format json
 ```
 
-### Plot Processed Data
+### Plot Site Data
 
-Supported series include level, EC, salinity, and temperature.
+Supported series include level, EC, salinity, and temperature. By default, plots use processed corrected data. Use `--type raw` for uncorrected logger values, `--type baro` for barometrically corrected values, or `--type uncompensated` for absolute-pressure/uncompensated logger records.
 
 ```bash
 ./aqualog plot --site "Site 1" --series level
+./aqualog plot --site "Site 1" --type raw --series level --series temp
+./aqualog plot --site "Site 1" --series uncompensated_level --format html --open
+./aqualog plot --site "Site 1" --type corrected --series level --output "level.svg" --open=false
 ```
 
 ### Export Processed Data
@@ -289,6 +339,7 @@ Export filtered JSON:
 | `import` | Import one logger file |
 | `import-dir` | Import multiple logger files from a directory |
 | `files list/remove` | Review or remove imported files |
+| `baro import/import-dir/assign/correct/correct-batch/status` | Manage barometric correction |
 | `status` | Summarise site data and processing state |
 | `validate` | Report processing readiness issues |
 | `gaps` | Find timestamp gaps in raw logger data |
