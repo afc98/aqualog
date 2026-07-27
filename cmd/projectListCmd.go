@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 NAME HERE <EMAIL ADDRESS>
-*/
 package cmd
 
 import (
@@ -10,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// projectListCmd represents the projectList command
 var projectListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List existing projects",
