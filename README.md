@@ -1,4 +1,4 @@
-# aqualog
+# Aqualog
 
 A command-line tool for managing environmental data logger records from multiple sources, including Aquaread, Solinst, and In-Situ. Aqualog stores projects, sites, loggers, imported time-series data, logger events, and manual water-level readings in a local SQLite database, then uses those records to process, query, plot, and export corrected water-level data.
 
@@ -59,13 +59,13 @@ Aqualog stores information in a hierarchical system:
 
 ```text
 Project
-└── Site
-    ├── Manual readings
-    └── Logger
-        ├── Imported files
-        ├── Events
-        └── Time-series data
-            └── Corrected data
++-- Site
+    +-- Manual readings
+    +-- Logger
+        +-- Imported files
+        +-- Events
+        +-- Time-series data
+            +-- Corrected data
 ```
 
 ### Projects
@@ -447,3 +447,7 @@ curl -X POST http://127.0.0.1:8080/export \
   -H "Content-Type: application/json" \
   -d '{"site_id":1,"file_path":"output.csv"}'
 ```
+
+## License
+
+Aqualog is licensed under the [MIT License](LICENSE).
