@@ -1,15 +1,21 @@
 package cmd
 
 import (
+	"aqualog/core/db"
 	"os"
 
 	"github.com/spf13/cobra"
 )
 
+var dbPath string
+
 var rootCmd = &cobra.Command{
 	Use:   "aqualog",
 	Short: "Manage environmental water-level logger data",
 	Long:  `Aqualog manages projects, sites, loggers, manual readings, logger events, imports, processing, plotting, and exports for environmental logger data.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		db.SetPathOverride(dbPath)
+	},
 }
 
 func Execute() {
@@ -20,4 +26,5 @@ func Execute() {
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringVar(&dbPath, "db", "", "Path to the SQLite database")
 }

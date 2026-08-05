@@ -98,7 +98,7 @@ Manual readings are water-level elevations relative to a common project datum. T
 
 ## Quick Start
 
-The database is automatically initialised on first run at `.aqualog/aqualog.db` beside the executable.
+The database is automatically initialised on first run in your user data directory. Use `info` to see the resolved path:
 
 ### Check Local Setup
 
@@ -106,6 +106,29 @@ The database is automatically initialised on first run at `.aqualog/aqualog.db` 
 ./aqualog info
 ./aqualog doctor
 ```
+
+### Choose a Database
+
+By default, Aqualog uses one database in your OS user data directory:
+
+- Windows: `%LOCALAPPDATA%\Aqualog\aqualog.db`
+- macOS: `~/Library/Application Support/Aqualog/aqualog.db`
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/aqualog/aqualog.db`
+
+Use `--db` to run a command against a specific database:
+
+```bash
+./aqualog --db ".aqualog/aqualog.db" doctor
+./aqualog --db "path/to/project-a.db" project list
+```
+
+Use `AQUALOG_DB` to select a database for a shell session:
+
+```bash
+AQUALOG_DB="path/to/project-a.db" ./aqualog info
+```
+
+If both are set, `--db` takes precedence over `AQUALOG_DB`.
 
 ### Create and Review a Project
 

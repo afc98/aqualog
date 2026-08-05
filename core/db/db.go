@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -13,9 +15,28 @@ import (
 //go:embed schema.sql
 var schemaFS embed.FS
 
+type PathSource string
+
+const (
+	PathSourceFlag    PathSource = "flag"
+	PathSourceEnv     PathSource = "env"
+	PathSourceDefault PathSource = "default"
+)
+
+type PathInfo struct {
+	Path   string
+	Source PathSource
+}
+
+var pathOverride string
+
+func SetPathOverride(path string) {
+	pathOverride = strings.TrimSpace(path)
+}
+
 // GetDB returns a ready-to-use database handle
 func GetDB() (*sql.DB, error) {
-	dbPath, err := dbPathFromExecutable()
+	dbPath, err := Path()
 	if err != nil {
 		return nil, err
 	}
@@ -43,19 +64,60 @@ func GetDB() (*sql.DB, error) {
 	return database, nil
 }
 
-// Resolve DB path relative to the executable
-func dbPathFromExecutable() (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve executable path: %w", err)
-	}
-
-	exeDir := filepath.Dir(exe)
-	return filepath.Join(exeDir, ".aqualog", "aqualog.db"), nil
+func ResolvePath() (PathInfo, error) {
+	return resolvePath(pathOverride, os.Getenv, runtime.GOOS, os.UserHomeDir)
 }
 
 func Path() (string, error) {
-	return dbPathFromExecutable()
+	info, err := ResolvePath()
+	if err != nil {
+		return "", err
+	}
+	return info.Path, nil
+}
+
+func resolvePath(override string, getenv func(string) string, goos string, userHomeDir func() (string, error)) (PathInfo, error) {
+	if path := strings.TrimSpace(override); path != "" {
+		return PathInfo{Path: filepath.Clean(path), Source: PathSourceFlag}, nil
+	}
+	if path := strings.TrimSpace(getenv("AQUALOG_DB")); path != "" {
+		return PathInfo{Path: filepath.Clean(path), Source: PathSourceEnv}, nil
+	}
+
+	dir, err := defaultDataDir(getenv, goos, userHomeDir)
+	if err != nil {
+		return PathInfo{}, err
+	}
+	return PathInfo{Path: filepath.Join(dir, "aqualog.db"), Source: PathSourceDefault}, nil
+}
+
+func defaultDataDir(getenv func(string) string, goos string, userHomeDir func() (string, error)) (string, error) {
+	switch goos {
+	case "windows":
+		if dir := strings.TrimSpace(getenv("LOCALAPPDATA")); dir != "" {
+			return filepath.Join(dir, "Aqualog"), nil
+		}
+		home, err := userHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve user data directory: %w", err)
+		}
+		return filepath.Join(home, "AppData", "Local", "Aqualog"), nil
+	case "darwin":
+		home, err := userHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve user data directory: %w", err)
+		}
+		return filepath.Join(home, "Library", "Application Support", "Aqualog"), nil
+	default:
+		if dir := strings.TrimSpace(getenv("XDG_DATA_HOME")); dir != "" {
+			return filepath.Join(dir, "aqualog"), nil
+		}
+		home, err := userHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve user data directory: %w", err)
+		}
+		return filepath.Join(home, ".local", "share", "aqualog"), nil
+	}
 }
 
 func applySchema(db *sql.DB) error {

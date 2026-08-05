@@ -13,12 +13,14 @@ var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check local aqualog runtime configuration",
 	Run: func(cmd *cobra.Command, args []string) {
-		path, err := db.Path()
+		info, err := db.ResolvePath()
 		if err != nil {
 			fmt.Println("Database path: error:", err)
 			return
 		}
+		path := info.Path
 		fmt.Println("Database path:", path)
+		fmt.Println("Database source:", info.Source)
 		conn, err := db.GetDB()
 		if err != nil {
 			fmt.Println("Database open: error:", err)
