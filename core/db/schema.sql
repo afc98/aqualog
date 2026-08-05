@@ -122,3 +122,12 @@ CREATE TABLE IF NOT EXISTS correction_runs (
     FOREIGN KEY (logger_id) REFERENCES loggers(id) ON DELETE SET NULL,
     FOREIGN KEY (barologger_id) REFERENCES loggers(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_logger_data_logger_file_id
+    ON logger_data(logger_file_id);
+
+CREATE INDEX IF NOT EXISTS idx_corrected_data_site_id
+    ON corrected_data(site_id);
+
+CREATE INDEX IF NOT EXISTS idx_corrected_data_logger_data_id
+    ON corrected_data(logger_data_id);

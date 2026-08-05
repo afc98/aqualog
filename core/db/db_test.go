@@ -1,6 +1,7 @@
 package db
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -110,6 +111,39 @@ func TestResolvePathDefaultHomeError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestSchemaCreatesFileRemovalIndexes(t *testing.T) {
+	SetPathOverride(filepath.Join(t.TempDir(), "aqualog.db"))
+	t.Cleanup(func() { SetPathOverride("") })
+
+	dbConn, err := GetDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbConn.Close()
+
+	for _, name := range []string{
+		"idx_logger_data_logger_file_id",
+		"idx_corrected_data_site_id",
+		"idx_corrected_data_logger_data_id",
+	} {
+		if !indexExists(t, dbConn, name) {
+			t.Errorf("index %q does not exist", name)
+		}
+	}
+}
+
+func indexExists(t *testing.T, dbConn *sql.DB, name string) bool {
+	t.Helper()
+	var exists bool
+	if err := dbConn.QueryRow(
+		`SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?)`,
+		name,
+	).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	return exists
 }
 
 func mapEnv(values map[string]string) func(string) string {

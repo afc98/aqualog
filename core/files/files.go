@@ -101,6 +101,11 @@ func Remove(id int) (int, int, error) {
 	}
 	defer tx.Rollback()
 
+	// Corrected rows reference raw logger data. Invalidate them first so raw-row
+	// deletion does not repeatedly scan or cascade through corrected_data.
+	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
+		return 0, 0, fmt.Errorf("failed to invalidate corrected data: %w", err)
+	}
 	res, err := tx.Exec(`DELETE FROM logger_data WHERE logger_file_id = ?`, id)
 	if err != nil {
 		return 0, 0, err
@@ -108,9 +113,6 @@ func Remove(id int) (int, int, error) {
 	rows, _ := res.RowsAffected()
 	if _, err := tx.Exec(`DELETE FROM logger_files WHERE id = ?`, id); err != nil {
 		return 0, 0, err
-	}
-	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
-		return 0, 0, fmt.Errorf("failed to invalidate corrected data: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, 0, err
