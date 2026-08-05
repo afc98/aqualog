@@ -94,6 +94,20 @@ func LoggerFileExists(loggerID int, filePath string) (bool, error) {
 	return exists, nil
 }
 
+func loggerFileExistsTx(tx *sql.Tx, loggerID int, filePath string) (bool, error) {
+	var exists bool
+	err := tx.QueryRow(
+		`SELECT EXISTS(
+			SELECT 1
+			FROM logger_files
+			WHERE logger_id = ? AND file = ?
+		)`,
+		loggerID, filePath,
+	).Scan(&exists)
+
+	return exists, err
+}
+
 func insertLoggerFileTx(
 	tx *sql.Tx,
 	loggerID int,
@@ -195,7 +209,9 @@ func ImportRecords(
 			return nil, err
 		}
 	}
-	exists, err := LoggerFileExists(loggerID, filePath)
+	// Use the active transaction here. Opening another connection after logger
+	// resolution can deadlock with this transaction's SQLite lock.
+	exists, err := loggerFileExistsTx(tx, loggerID, filePath)
 	if err != nil {
 		return nil, err
 	}
