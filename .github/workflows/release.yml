@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            asset: linux_amd64
+            executable: aqualog
+            archive: tar
+          - runner: windows-2025
+            goos: windows
+            goarch: amd64
+            asset: windows_amd64
+            executable: aqualog.exe
+            archive: zip
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            asset: darwin_amd64
+            executable: aqualog
+            archive: tar
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+            asset: darwin_arm64
+            executable: aqualog
+            archive: tar
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -Fq "## [$version]" CHANGELOG.md
+
+      - name: Build binary
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p package
+          go build -trimpath -ldflags="-s -w" -o "package/${{ matrix.executable }}" ./
+
+      - name: Create tar archive
+        if: matrix.archive == 'tar'
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          tar -C package -czf "aqualog_${version}_${{ matrix.asset }}.tar.gz" "${{ matrix.executable }}"
+
+      - name: Create zip archive
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          Compress-Archive -Path "package/${{ matrix.executable }}" -DestinationPath "aqualog_${version}_${{ matrix.asset }}.zip"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: aqualog-${{ matrix.asset }}
+          path: aqualog_*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Download archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: aqualog-*
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums and release notes
+        shell: bash
+        run: |
+          cd dist
+          sha256sum aqualog_* > SHA256SUMS
+          cd ..
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## [$version]" '
+            $0 == heading { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --title "Aqualog $GITHUB_REF_NAME" \
+            --notes-file release-notes.md
