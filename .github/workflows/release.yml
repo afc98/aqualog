@@ -114,11 +114,12 @@ jobs:
           cd ..
           version="${GITHUB_REF_NAME#v}"
           awk -v heading="## [$version]" '
-            $0 == heading { found=1; next }
+            $0 == heading || index($0, heading " ") == 1 { found=1; next }
             found && /^## \[/ { exit }
+            found && /^\[[^]]+\]: / { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
-          test -s release-notes.md
+          grep -q '[^[:space:]]' release-notes.md
 
       - name: Publish release
         env:
