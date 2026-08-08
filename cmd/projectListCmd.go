@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"aqualog/core/project"
 	"fmt"
+	"github.com/afc98/aqualog/core/project"
 
 	"github.com/spf13/cobra"
 )

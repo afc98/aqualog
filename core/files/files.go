@@ -1,9 +1,9 @@
 package files
 
 import (
-	"aqualog/core/db"
 	"database/sql"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
 	"time"
 )
 

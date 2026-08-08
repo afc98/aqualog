@@ -1,8 +1,8 @@
 package event
 
 import (
-	"aqualog/core/db"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
 	"strings"
 	"time"
 )

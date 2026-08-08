@@ -1,12 +1,12 @@
 package cmd
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/query"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/query"
 	"os"
 	"strconv"
 

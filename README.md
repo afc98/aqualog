@@ -30,27 +30,37 @@ A command-line tool for managing environmental data logger records from multiple
 
 ## Installation
 
-### Prerequisites
+### Prebuilt Binaries
 
-- Go 1.25.1 or higher
-- SQLite3
+Download the archive for your operating system and architecture from the
+[GitHub Releases](https://github.com/afc98/aqualog/releases) page, extract it,
+and place the `aqualog` executable somewhere on your `PATH`.
 
 ### Build from Source
 
-For Windows:
+Aqualog uses [`go-sqlite3`](https://github.com/mattn/go-sqlite3), which embeds
+SQLite through CGO. Building from source requires:
+
+- Go 1.25.1 or newer.
+- `CGO_ENABLED=1` (the default when a suitable C compiler is available).
+- A C compiler on `PATH`: GCC/build tools on Linux, Xcode Command Line Tools on
+  macOS, or a 64-bit MinGW GCC toolchain on Windows.
+
+The standalone SQLite command-line program is not required.
+
+Clone the repository, then build on the target operating system:
 
 ```bash
 git clone https://github.com/afc98/aqualog.git
 cd aqualog
-go build -o aqualog.exe ./
+CGO_ENABLED=1 go build -o aqualog ./
 ```
 
-For Linux:
+In PowerShell, use:
 
-```bash
-git clone https://github.com/afc98/aqualog.git
-cd aqualog
-go build -o aqualog ./
+```powershell
+$env:CGO_ENABLED = "1"
+go build -o aqualog.exe ./
 ```
 
 ## Structure
@@ -372,104 +382,6 @@ Export filtered JSON:
 | `export` | Export processed data |
 | `info` | Show database path and supported import types |
 | `doctor` | Check database and runtime health |
-| `serve` | Start the local HTTP API |
-
-## HTTP Server API
-
-Aqualog can also be run as a local HTTP server.
-
-```bash
-./aqualog serve
-```
-
-The default listen address is `127.0.0.1:8080`. Use `--addr` to choose a different address.
-
-```bash
-./aqualog serve --addr 127.0.0.1:8080
-```
-
-Requests and responses use JSON unless an endpoint returns `204 No Content`. Error responses use this shape:
-
-```json
-{"status":"error","message":"...","code":400}
-```
-
-### Endpoints
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/project` | List projects |
-| `POST` | `/project` | Create a project |
-| `GET` | `/site?project_id=1` | List sites for a project |
-| `POST` | `/site` | Create a site |
-| `GET` | `/logger?site_id=1` | List loggers for a site |
-| `POST` | `/logger` | Create a logger |
-| `GET` | `/manual?site_id=1` | List manual readings for a site |
-| `POST` | `/manual` | Create a manual reading |
-| `GET` | `/manual/{id}` | Get a manual reading |
-| `PUT` | `/manual/{id}` | Update a manual reading |
-| `DELETE` | `/manual/{id}` | Delete a manual reading |
-| `GET` | `/event?site_id=1&logger_id=1` | List events by site and/or logger |
-| `POST` | `/event` | Create an event |
-| `GET` | `/event/{id}` | Get an event |
-| `PUT` | `/event/{id}` | Update an event |
-| `DELETE` | `/event/{id}` | Delete an event |
-| `POST` | `/import` | Import logger data |
-| `POST` | `/process?site_id=1` | Process logger data for a site |
-| `POST` | `/export` | Export processed data |
-| `GET` | `/data?site_id=1&type=raw` | Query raw logger data |
-| `GET` | `/data?site_id=1&type=corrected` | Query corrected data |
-
-Most successful responses return the created or requested object directly. Event endpoints return a wrapper with `status` and `data`.
-
-### HTTP Examples
-
-Create a project:
-
-```bash
-curl -X POST http://127.0.0.1:8080/project \
-  -H "Content-Type: application/json" \
-  -d '{"Name":"My Project","Description":"Monitoring project"}'
-```
-
-Create a site:
-
-```bash
-curl -X POST http://127.0.0.1:8080/site \
-  -H "Content-Type: application/json" \
-  -d '{"ProjectID":1,"Name":"Site 1","Latitude":45.0,"Longitude":-120.0}'
-```
-
-Create a logger:
-
-```bash
-curl -X POST http://127.0.0.1:8080/logger \
-  -H "Content-Type: application/json" \
-  -d '{"SiteID":1,"Name":"Logger 1","Model":"Aquaread LeveLine CTD","Serial":"1234567"}'
-```
-
-Import logger data and replace existing timestamp matches:
-
-```bash
-curl -X POST http://127.0.0.1:8080/import \
-  -H "Content-Type: application/json" \
-  -d '{"file_type":"aquaread","file_path":"path/to/file.tab","site_id":1,"logger_id":1,"replace":true}'
-```
-
-Process a site and query corrected data:
-
-```bash
-curl -X POST "http://127.0.0.1:8080/process?site_id=1"
-curl "http://127.0.0.1:8080/data?site_id=1&type=corrected"
-```
-
-Export processed data:
-
-```bash
-curl -X POST http://127.0.0.1:8080/export \
-  -H "Content-Type: application/json" \
-  -d '{"site_id":1,"file_path":"output.csv"}'
-```
 
 ## License
 

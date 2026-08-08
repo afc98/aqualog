@@ -1,8 +1,8 @@
 package site
 
 import (
-	"aqualog/core/db"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
 )
 
 type AddParams struct {

@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"aqualog/core/baro"
-	"aqualog/core/db"
-	"aqualog/core/importer"
 	"errors"
 	"fmt"
+	"github.com/afc98/aqualog/core/baro"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/importer"
 	"path/filepath"
 	"time"
 

@@ -1,12 +1,12 @@
 package importer
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/parsers"
-	"aqualog/core/utils"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/parsers"
+	"github.com/afc98/aqualog/core/utils"
 	"os"
 	"time"
 )

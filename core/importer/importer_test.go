@@ -1,8 +1,8 @@
 package importer
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/parsers"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/parsers"
 	"path/filepath"
 	"testing"
 	"time"

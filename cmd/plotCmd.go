@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"aqualog/core/db"
-	aqlplot "aqualog/core/plot"
+	"github.com/afc98/aqualog/core/db"
+	aqlplot "github.com/afc98/aqualog/core/plot"
 
 	"github.com/spf13/cobra"
 )

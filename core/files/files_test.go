@@ -1,8 +1,8 @@
 package files
 
 import (
-	"aqualog/core/db"
 	"database/sql"
+	"github.com/afc98/aqualog/core/db"
 	"path/filepath"
 	"testing"
 )
