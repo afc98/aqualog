@@ -6,6 +6,7 @@ import (
 	"aqualog/core/importer"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -212,38 +213,65 @@ var baroCorrectBatchCmd = &cobra.Command{
 			fmt.Println("Project not found:", err)
 			return
 		}
-		conn, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
+		opts, ok := baroOptionsFromFlags(cmd)
+		if !ok {
 			return
 		}
-		defer conn.Close()
-		rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = ? ORDER BY id`, projectID)
-		if err != nil {
-			fmt.Println("Failed to list sites:", err)
-			return
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var siteID int
-			var name string
-			if err := rows.Scan(&siteID, &name); err != nil {
-				fmt.Println("Failed to read site:", err)
-				continue
-			}
-			opts, ok := baroOptionsFromFlags(cmd)
-			if !ok {
-				return
-			}
-			opts.SiteID = siteID
-			result, err := baro.Correct(opts)
-			if err != nil {
-				fmt.Printf("%s: failed: %v\n", name, err)
-				continue
-			}
-			fmt.Printf("%s: run=%d updated=%d skipped=%d\n", name, result.RunID, result.Updated, result.Skipped)
+		if err := runBaroCorrectBatch(projectID, opts, cmd.OutOrStdout()); err != nil {
+			fmt.Fprintln(cmd.OutOrStdout(), "Failed to list sites:", err)
 		}
 	},
+}
+
+type batchSite struct {
+	id   int
+	name string
+}
+
+func runBaroCorrectBatch(projectID int, opts baro.CorrectOptions, out io.Writer) error {
+	sites, err := loadBatchSites(projectID)
+	if err != nil {
+		return err
+	}
+
+	for _, site := range sites {
+		siteOpts := opts
+		siteOpts.SiteID = site.id
+		result, err := baro.Correct(siteOpts)
+		if err != nil {
+			fmt.Fprintf(out, "%s: failed: %v\n", site.name, err)
+			continue
+		}
+		fmt.Fprintf(out, "%s: run=%d updated=%d skipped=%d\n", site.name, result.RunID, result.Updated, result.Skipped)
+	}
+	return nil
+}
+
+func loadBatchSites(projectID int) ([]batchSite, error) {
+	conn, err := db.GetDB()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = ? ORDER BY id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sites []batchSite
+	for rows.Next() {
+		var site batchSite
+		if err := rows.Scan(&site.id, &site.name); err != nil {
+			return nil, err
+		}
+		sites = append(sites, site)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sites, nil
 }
 
 var baroStatusCmd = &cobra.Command{
