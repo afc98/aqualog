@@ -327,7 +327,14 @@ Choose output format:
 
 ### Plot Site Data
 
-Supported series include level, EC, salinity, and temperature. By default, plots use processed corrected data. Use `--type raw` for uncorrected logger values, `--type baro` for barometrically corrected values, or `--type uncompensated` for absolute-pressure/uncompensated logger records.
+Supported series include level, EC, salinity, temperature, and atmospheric pressure. By default, plots use processed corrected data. Use `--type raw` for uncorrected logger values, `--type baro` for barometrically corrected water level, or `--type uncompensated` for absolute-pressure/uncompensated logger records.
+
+Plot atmospheric pressure in kPa. Aqualog uses the site's barologger assignment or latest correction run by default; use `--barologger` to override it:
+
+```bash
+./aqualog plot --site "Site 1" --type pressure --series pressure
+./aqualog plot --site "Site 1" --type pressure --series pressure --barologger "Barologger 1"
+```
 
 ```bash
 ./aqualog plot --site "Site 1" --series level

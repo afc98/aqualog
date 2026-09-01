@@ -10,6 +10,7 @@ import (
 
 type LoggerRawRow struct {
 	ID        int
+	LoggerID  int
 	Timestamp time.Time
 	RawValue  float64
 	TempC     float64
@@ -23,6 +24,7 @@ type ManualMeasurement struct {
 }
 
 type LoggerEvent struct {
+	LoggerID  int
 	Timestamp time.Time
 	EventType string
 }
@@ -66,10 +68,43 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 		return err
 	}
 
-	corrected, err := ComputeCorrectedRows(raw, manual, events)
-	if err != nil {
-		return err
+	rawByLogger := make(map[int][]LoggerRawRow)
+	for _, row := range raw {
+		rawByLogger[row.LoggerID] = append(rawByLogger[row.LoggerID], row)
 	}
+	eventsByLogger := make(map[int][]LoggerEvent)
+	for _, event := range events {
+		eventsByLogger[event.LoggerID] = append(eventsByLogger[event.LoggerID], event)
+	}
+
+	loggerIDs := make([]int, 0, len(rawByLogger))
+	for loggerID := range rawByLogger {
+		loggerIDs = append(loggerIDs, loggerID)
+	}
+	sort.Ints(loggerIDs)
+
+	var corrected []CorrectedRow
+	timestampOwner := make(map[int64]int)
+	for _, loggerID := range loggerIDs {
+		loggerRows, err := ComputeCorrectedRows(rawByLogger[loggerID], manual, eventsByLogger[loggerID])
+		if err != nil {
+			return fmt.Errorf("logger %d: %w", loggerID, err)
+		}
+		for _, row := range loggerRows {
+			timestampKey := row.Timestamp.UnixNano()
+			if otherLoggerID, exists := timestampOwner[timestampKey]; exists {
+				return fmt.Errorf(
+					"water-level loggers %d and %d both produce corrected data at %s; adjust their install/remove events so deployments do not overlap",
+					otherLoggerID,
+					loggerID,
+					row.Timestamp.Format(time.RFC3339),
+				)
+			}
+			timestampOwner[timestampKey] = loggerID
+			corrected = append(corrected, row)
+		}
+	}
+	sort.Slice(corrected, func(i, j int) bool { return corrected[i].Timestamp.Before(corrected[j].Timestamp) })
 
 	return StoreCorrectedRows(db, siteID, corrected)
 }
@@ -79,6 +114,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	rows, err := db.Query(`
 		SELECT
 			d.id,
+			d.logger_id,
 			d.timestamp,
 			d.level_m,
 			d.temp_c,
@@ -87,7 +123,8 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 		FROM logger_data d
 		JOIN loggers l ON l.id = d.logger_id
 		WHERE l.site_id = ?
-		ORDER BY d.timestamp ASC
+		  AND COALESCE(NULLIF(l.role, ''), 'water_level') = 'water_level'
+		ORDER BY d.logger_id ASC, d.timestamp ASC
 	`, siteID)
 	if err != nil {
 		return nil, err
@@ -104,6 +141,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 
 		if err := rows.Scan(
 			&r.ID,
+			&r.LoggerID,
 			&ts,
 			&r.RawValue,
 			&tempC,
@@ -177,12 +215,14 @@ func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 
 	rows, err := db.Query(`
 		SELECT
+			e.logger_id,
 			e.timestamp,
 			e.event_type
 		FROM logger_events e
 		JOIN loggers l ON l.id = e.logger_id
 		WHERE l.site_id = ?
-		ORDER BY e.timestamp ASC
+		  AND COALESCE(NULLIF(l.role, ''), 'water_level') = 'water_level'
+		ORDER BY e.logger_id ASC, e.timestamp ASC
 	`, siteID)
 	if err != nil {
 		return nil, err
@@ -195,7 +235,7 @@ func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 		var e LoggerEvent
 		var ts string
 
-		if err := rows.Scan(&ts, &e.EventType); err != nil {
+		if err := rows.Scan(&e.LoggerID, &ts, &e.EventType); err != nil {
 			return nil, err
 		}
 
