@@ -14,8 +14,8 @@ type LoggerRawRow struct {
 	Timestamp time.Time
 	RawValue  float64
 	TempC     float64
-	SalPSU    float64
-	ECUS      float64
+	SalPSU    *float64
+	ECUS      *float64
 }
 
 type ManualMeasurement struct {
@@ -45,8 +45,8 @@ type CorrectedRow struct {
 	Timestamp time.Time
 	Value     float64
 	TempC     float64
-	SalPSU    float64
-	ECUS      float64
+	SalPSU    *float64
+	ECUS      *float64
 }
 
 func ProcessLoggerData(db *sql.DB, siteID int) error {
@@ -162,10 +162,12 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 			r.TempC = tempC.Float64
 		}
 		if salPSU.Valid {
-			r.SalPSU = salPSU.Float64
+			value := salPSU.Float64
+			r.SalPSU = &value
 		}
 		if ecUS.Valid {
-			r.ECUS = ecUS.Float64
+			value := ecUS.Float64
+			r.ECUS = &value
 		}
 
 		out = append(out, r)

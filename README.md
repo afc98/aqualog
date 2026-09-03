@@ -357,6 +357,15 @@ Export filtered JSON:
 ./aqualog export --site "Site 1" --file "output.json" --format json --from "2025-01-01T00:00:00Z" --to "2025-03-01T00:00:00Z"
 ```
 
+Select measurement groups explicitly by repeating `--series`. Timestamp and site/logger metadata are always included; `level` includes raw, manual, and corrected level columns:
+
+```bash
+./aqualog export --site "Site 1" --file "levels.csv" --series level --series temp
+./aqualog export --site "Site 1" --file "chemistry.csv" --series salinity --series ec
+```
+
+Optional salinity and conductivity measurements remain in the export schema. Missing measurements are written as blank CSV cells or JSON `null`; genuine measured zeroes remain numeric zeroes.
+
 ## Command Summary
 
 | Command | Purpose |

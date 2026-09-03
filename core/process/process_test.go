@@ -39,6 +39,30 @@ func TestProcessLoggerDataExcludesBarometricRows(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("barometric corrected row count = %d; want 0", count)
 	}
+	if err := database.QueryRow(`SELECT COUNT(*) FROM corrected_data WHERE site_id = 1 AND (sal_psu IS NOT NULL OR ec_us IS NOT NULL)`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("corrected rows with fabricated optional values = %d; want 0", count)
+	}
+}
+
+func TestProcessLoggerDataPreservesRealZeroOptionalValues(t *testing.T) {
+	database := newProcessTestDB(t)
+	seedProcessSite(t, database, true)
+	if _, err := database.Exec(`UPDATE logger_data SET sal_psu = 0, ec_us = 0 WHERE logger_id = 2`); err != nil {
+		t.Fatal(err)
+	}
+	if err := ProcessLoggerData(database, 1); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := database.QueryRow(`SELECT COUNT(*) FROM corrected_data WHERE site_id = 1 AND sal_psu = 0 AND ec_us = 0`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("corrected rows preserving measured zeroes = %d; want 2", count)
+	}
 }
 
 func TestProcessLoggerDataCombinesNonOverlappingWaterLoggers(t *testing.T) {

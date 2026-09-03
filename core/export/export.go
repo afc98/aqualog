@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -16,9 +17,9 @@ type LoggerCorrectedRow struct {
 	SiteID    int
 	Timestamp time.Time
 	Value     float64
-	TempC     float64
-	SalPSU    float64
-	ECUS      float64
+	TempC     *float64
+	SalPSU    *float64
+	ECUS      *float64
 }
 
 type ExportRow struct {
@@ -30,15 +31,19 @@ type ExportRow struct {
 	Level          float64
 	ManualReading  *float64
 	CorrectedLevel float64
-	SalinityPSU    float64
-	ECUS           float64
+	TempC          *float64
+	SalinityPSU    *float64
+	ECUS           *float64
 }
 
 type Options struct {
 	From   string
 	To     string
 	Format string
+	Series []string
 }
+
+var defaultSeries = []string{"level", "salinity", "ec"}
 
 func ExportData(siteID int, fileName string) error {
 	return ExportDataWithOptions(siteID, fileName, Options{Format: "csv"})
@@ -53,11 +58,15 @@ func ExportDataWithOptions(siteID int, fileName string, opts Options) error {
 	if err != nil {
 		return err
 	}
+	series, err := normalizeSeries(opts.Series)
+	if err != nil {
+		return err
+	}
 	switch opts.Format {
 	case "", "csv":
-		return WriteCSV(rows, fileName)
+		return writeCSVWithSeries(rows, fileName, series)
 	case "json":
-		return WriteJSON(rows, fileName)
+		return writeJSONWithSeries(rows, fileName, series)
 	default:
 		return fmt.Errorf("unsupported export format %q", opts.Format)
 	}
@@ -91,7 +100,6 @@ func BuildExport(siteID int) ([]ExportRow, error) {
 	}
 
 	var out []ExportRow
-
 	for _, row := range correctedRows {
 		manual := manualMeasurementAt(measurements, row.Timestamp)
 
@@ -109,6 +117,7 @@ func BuildExport(siteID int) ([]ExportRow, error) {
 			Level:          rawValueAt(rawRows, row.Timestamp),
 			ManualReading:  manual,
 			CorrectedLevel: row.Value,
+			TempC:          row.TempC,
 			SalinityPSU:    row.SalPSU,
 			ECUS:           row.ECUS,
 		})
@@ -118,6 +127,10 @@ func BuildExport(siteID int) ([]ExportRow, error) {
 }
 
 func WriteCSV(rows []ExportRow, fileName string) error {
+	return writeCSVWithSeries(rows, fileName, defaultSeries)
+}
+
+func writeCSVWithSeries(rows []ExportRow, fileName string, series []string) error {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return err
@@ -127,18 +140,27 @@ func WriteCSV(rows []ExportRow, fileName string) error {
 	w := csv.NewWriter(f)
 	defer w.Flush()
 
-	w.Write([]string{
+	header := []string{
 		"timestamp",
 		"site_name",
 		"logger_name",
 		"logger_model",
 		"logger_serial",
-		"level",
-		"manual_reading",
-		"corrected_level",
-		"salinity_psu",
-		"ec_us",
-	})
+	}
+	selected := seriesSet(series)
+	if selected["level"] {
+		header = append(header, "level", "manual_reading", "corrected_level")
+	}
+	if selected["temp"] {
+		header = append(header, "temp_c")
+	}
+	if selected["salinity"] {
+		header = append(header, "salinity_psu")
+	}
+	if selected["ec"] {
+		header = append(header, "ec_us")
+	}
+	w.Write(header)
 
 	for _, r := range rows {
 		manual := ""
@@ -146,32 +168,105 @@ func WriteCSV(rows []ExportRow, fileName string) error {
 			manual = fmt.Sprintf("%.4f", *r.ManualReading)
 		}
 
-		w.Write([]string{
+		record := []string{
 			r.Timestamp,
 			r.SiteName,
 			r.LoggerName,
 			r.LoggerModel,
 			r.LoggerSerial,
-			fmt.Sprintf("%.4f", r.Level),
-			manual,
-			fmt.Sprintf("%.4f", r.CorrectedLevel),
-			fmt.Sprintf("%.4f", r.SalinityPSU),
-			fmt.Sprintf("%.4f", r.ECUS),
-		})
+		}
+		if selected["level"] {
+			record = append(record, fmt.Sprintf("%.4f", r.Level), manual, fmt.Sprintf("%.4f", r.CorrectedLevel))
+		}
+		if selected["temp"] {
+			record = append(record, formatOptionalFloat(r.TempC))
+		}
+		if selected["salinity"] {
+			record = append(record, formatOptionalFloat(r.SalinityPSU))
+		}
+		if selected["ec"] {
+			record = append(record, formatOptionalFloat(r.ECUS))
+		}
+		w.Write(record)
 	}
 
 	return nil
 }
 
+func formatOptionalFloat(value *float64) string {
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprintf("%.4f", *value)
+}
+
 func WriteJSON(rows []ExportRow, fileName string) error {
+	return writeJSONWithSeries(rows, fileName, defaultSeries)
+}
+
+func writeJSONWithSeries(rows []ExportRow, fileName string, series []string) error {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	selected := seriesSet(series)
+	projected := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		item := map[string]any{
+			"Timestamp": row.Timestamp, "SiteName": row.SiteName, "LoggerName": row.LoggerName,
+			"LoggerModel": row.LoggerModel, "LoggerSerial": row.LoggerSerial,
+		}
+		if selected["level"] {
+			item["Level"] = row.Level
+			item["ManualReading"] = row.ManualReading
+			item["CorrectedLevel"] = row.CorrectedLevel
+		}
+		if selected["temp"] {
+			item["TempC"] = row.TempC
+		}
+		if selected["salinity"] {
+			item["SalinityPSU"] = row.SalinityPSU
+		}
+		if selected["ec"] {
+			item["ECUS"] = row.ECUS
+		}
+		projected = append(projected, item)
+	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	return enc.Encode(rows)
+	return enc.Encode(projected)
+}
+
+func normalizeSeries(values []string) ([]string, error) {
+	if len(values) == 0 {
+		return append([]string(nil), defaultSeries...), nil
+	}
+	selected := make(map[string]bool, len(values))
+	for _, rawValue := range values {
+		value := strings.ToLower(strings.TrimSpace(rawValue))
+		switch value {
+		case "level", "temp", "salinity", "ec":
+			selected[value] = true
+		default:
+			return nil, fmt.Errorf("unsupported export series %q; use level, temp, salinity, or ec", rawValue)
+		}
+	}
+	ordered := make([]string, 0, len(selected))
+	for _, value := range []string{"level", "temp", "salinity", "ec"} {
+		if selected[value] {
+			ordered = append(ordered, value)
+		}
+	}
+	return ordered, nil
+}
+
+func seriesSet(series []string) map[string]bool {
+	selected := make(map[string]bool, len(series))
+	for _, value := range series {
+		selected[value] = true
+	}
+	return selected
 }
 
 func filterRows(rows []ExportRow, opts Options) ([]ExportRow, error) {
@@ -212,16 +307,17 @@ func filterRows(rows []ExportRow, opts Options) ([]ExportRow, error) {
 func loadCorrectedData(dbConn *sql.DB, siteID int) ([]LoggerCorrectedRow, error) {
 	rows, err := dbConn.Query(`
 		SELECT
-			id,
-			site_id,
-			timestamp,
-			corrected_value,
-			temp_c,
-			sal_psu,
-			ec_us
-		FROM corrected_data
-		WHERE site_id = ?
-		ORDER BY timestamp ASC
+			c.id,
+			c.site_id,
+			c.timestamp,
+			c.corrected_value,
+			d.temp_c,
+			d.sal_psu,
+			d.ec_us
+		FROM corrected_data c
+		JOIN logger_data d ON d.id = c.logger_data_id
+		WHERE c.site_id = ?
+		ORDER BY c.timestamp ASC
 	`, siteID)
 	if err != nil {
 		return nil, fmt.Errorf("query corrected_data: %w", err)
@@ -257,15 +353,18 @@ func loadCorrectedData(dbConn *sql.DB, siteID int) ([]LoggerCorrectedRow, error)
 		row.Timestamp = t
 
 		if tempC.Valid {
-			row.TempC = tempC.Float64
+			value := tempC.Float64
+			row.TempC = &value
 		}
 
 		if salPSU.Valid {
-			row.SalPSU = salPSU.Float64
+			value := salPSU.Float64
+			row.SalPSU = &value
 		}
 
 		if ecUS.Valid {
-			row.ECUS = ecUS.Float64
+			value := ecUS.Float64
+			row.ECUS = &value
 		}
 
 		out = append(out, row)
