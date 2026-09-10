@@ -25,7 +25,6 @@ func Process(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer database.Close()
 
 	if err := process.ProcessLoggerData(database, siteID); err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)

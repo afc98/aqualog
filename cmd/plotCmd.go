@@ -78,7 +78,6 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("database error: %w", err)
 		}
-		defer dbConn.Close()
 
 		var allSeries []aqlplot.SeriesData
 		for _, spec := range plotSeries {
@@ -243,9 +242,9 @@ func resolvePressureBarologger(dbConn *sql.DB, siteID int, ident string) (int, s
 	}
 
 	queries := []string{
-		`SELECT l.id, l.name FROM baro_assignments a JOIN loggers l ON l.id = a.barologger_id WHERE a.scope = 'site' AND a.scope_id = ?`,
-		`SELECT l.id, l.name FROM baro_assignments a JOIN sites s ON s.project_id = a.scope_id JOIN loggers l ON l.id = a.barologger_id WHERE a.scope = 'project' AND s.id = ?`,
-		`SELECT l.id, l.name FROM correction_runs r JOIN loggers l ON l.id = r.barologger_id WHERE r.site_id = ? ORDER BY r.id DESC LIMIT 1`,
+		`SELECT l.id, l.name FROM baro_assignments a JOIN loggers l ON l.id = a.barologger_id WHERE a.scope = 'site' AND a.scope_id = $1`,
+		`SELECT l.id, l.name FROM baro_assignments a JOIN sites s ON s.project_id = a.scope_id JOIN loggers l ON l.id = a.barologger_id WHERE a.scope = 'project' AND s.id = $1`,
+		`SELECT l.id, l.name FROM correction_runs r JOIN loggers l ON l.id = r.barologger_id WHERE r.site_id = $1 ORDER BY r.id DESC LIMIT 1`,
 	}
 	for _, query := range queries {
 		var loggerID int
@@ -259,7 +258,7 @@ func resolvePressureBarologger(dbConn *sql.DB, siteID int, ident string) (int, s
 		}
 	}
 
-	rows, err := dbConn.Query(`SELECT id, name FROM loggers WHERE site_id = ? AND role = 'barometric' ORDER BY id`, siteID)
+	rows, err := dbConn.Query(`SELECT id, name FROM loggers WHERE site_id = $1 AND role = 'barometric' ORDER BY id`, siteID)
 	if err != nil {
 		return 0, "", err
 	}
@@ -289,10 +288,10 @@ func resolvePressureBarologger(dbConn *sql.DB, siteID int, ident string) (int, s
 }
 
 func resolvePlotLoggerIdentifier(dbConn *sql.DB, ident string) (int, string, error) {
-	query := `SELECT id, name FROM loggers WHERE name = ? ORDER BY id LIMIT 1`
+	query := `SELECT id, name FROM loggers WHERE name = $1 ORDER BY id LIMIT 1`
 	arg := any(strings.TrimSpace(ident))
 	if id, err := strconv.Atoi(strings.TrimSpace(ident)); err == nil {
-		query = `SELECT id, name FROM loggers WHERE id = ?`
+		query = `SELECT id, name FROM loggers WHERE id = $1`
 		arg = id
 	}
 	var loggerID int
@@ -313,10 +312,10 @@ func loadBarometricPressureSeries(dbConn *sql.DB, loggerID int, loggerName strin
 				WHEN 'barometric_pressure_kpa' THEN d.imported_value
 			END
 		FROM logger_data d
-		WHERE d.logger_id = ?
+		WHERE d.logger_id = $1
 		  AND d.imported_kind IN ('barometric_pressure_mbar', 'barometric_pressure_kpa')
-		  AND d.timestamp >= ?
-		  AND d.timestamp <= ?
+		  AND d.timestamp >= $2
+		  AND d.timestamp <= $3
 		ORDER BY d.timestamp ASC
 	`, loggerID, start.Format(time.RFC3339), end.Format(time.RFC3339))
 	if err != nil {
@@ -334,9 +333,9 @@ func loadCorrectedPlotSeries(dbConn *sql.DB, siteID int, name string, start, end
 	rows, err := dbConn.Query(fmt.Sprintf(`
 		SELECT timestamp, %s
 		FROM corrected_data
-		WHERE site_id = ?
-		  AND timestamp >= ?
-		  AND timestamp <= ?
+		WHERE site_id = $1
+		  AND timestamp >= $2
+		  AND timestamp <= $3
 		ORDER BY timestamp ASC
 	`, columnName), siteID, start.Format(time.RFC3339), end.Format(time.RFC3339))
 	if err != nil {
@@ -364,9 +363,9 @@ func loadLoggerPlotSeries(dbConn *sql.DB, siteID int, source, name string, start
 		SELECT d.timestamp, %s
 		FROM logger_data d
 		JOIN loggers l ON l.id = d.logger_id
-		WHERE l.site_id = ?
-		  AND d.timestamp >= ?
-		  AND d.timestamp <= ?
+		WHERE l.site_id = $1
+		  AND d.timestamp >= $2
+		  AND d.timestamp <= $3
 		  %s
 		ORDER BY d.timestamp ASC
 	`, columnName, where), siteID, start.Format(time.RFC3339), end.Format(time.RFC3339))
@@ -383,9 +382,9 @@ func loadUncompensatedLevelSeries(dbConn *sql.DB, siteID int, start, end time.Ti
 		SELECT d.timestamp, d.imported_value, d.imported_kind
 		FROM logger_data d
 		JOIN loggers l ON l.id = d.logger_id
-		WHERE l.site_id = ?
-		  AND d.timestamp >= ?
-		  AND d.timestamp <= ?
+		WHERE l.site_id = $1
+		  AND d.timestamp >= $2
+		  AND d.timestamp <= $3
 		  AND d.imported_kind IN ('absolute_pressure_mbar', 'absolute_pressure_kpa', 'absolute_pressure_head_m')
 		ORDER BY d.timestamp ASC
 	`, siteID, start.Format(time.RFC3339), end.Format(time.RFC3339))

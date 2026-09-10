@@ -252,9 +252,8 @@ func loadBatchSites(projectID int) ([]batchSite, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
 
-	rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = ? ORDER BY id`, projectID)
+	rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = $1 ORDER BY id`, projectID)
 	if err != nil {
 		return nil, err
 	}

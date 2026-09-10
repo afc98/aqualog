@@ -107,7 +107,7 @@ The database is automatically initialised on first run in your user data directo
 ./aqualog doctor
 ```
 
-### Choose a Database
+### Choose a Database Backend
 
 By default, Aqualog uses one database in your OS user data directory:
 
@@ -129,6 +129,29 @@ AQUALOG_DB="path/to/project-a.db" ./aqualog info
 ```
 
 If both are set, `--db` takes precedence over `AQUALOG_DB`.
+
+For a shared PostgreSQL 14 or newer database, use a standard connection URL:
+
+```bash
+./aqualog --database-url "postgres://user:password@db.example/aqualog?sslmode=require" doctor
+AQUALOG_DATABASE_URL="postgres://user:password@db.example/aqualog?sslmode=require" ./aqualog project list
+```
+
+Do not set both SQLite and PostgreSQL options at the same level. An explicit
+`--db` or `--database-url` flag takes precedence over database environment
+variables. `info` and `doctor` redact PostgreSQL credentials in their output.
+
+To copy a current Aqualog SQLite database into an initialized, empty PostgreSQL
+database:
+
+```bash
+./aqualog --database-url "postgres://user:password@db.example/aqualog?sslmode=require" \
+  migrate sqlite-to-postgres --source "path/to/aqualog.db"
+```
+
+The copy is transactional, preserves IDs, validates row counts and
+relationships, and refuses to merge into a destination containing Aqualog
+data. The HTTP server remains SQLite-only in this release.
 
 ### Create and Review a Project
 
@@ -386,7 +409,8 @@ Optional salinity and conductivity measurements remain in the export schema. Mis
 | `query` | Query raw or corrected data |
 | `plot` | Plot site data |
 | `export` | Export processed data |
-| `info` | Show database path and supported import types |
+| `migrate sqlite-to-postgres` | Copy SQLite data into empty PostgreSQL |
+| `info` | Show database backend, location, and supported import types |
 | `doctor` | Check database and runtime health |
 | `serve` | Start the local HTTP API |
 

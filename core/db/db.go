@@ -1,19 +1,32 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed schema.sql
+//go:embed schema.sql schema_postgres.sql
 var schemaFS embed.FS
+
+type Backend string
+
+const (
+	BackendSQLite   Backend = "sqlite"
+	BackendPostgres Backend = "postgres"
+)
 
 type PathSource string
 
@@ -27,45 +40,155 @@ type PathInfo struct {
 	Path   string
 	Source PathSource
 }
-
-var pathOverride string
-
-func SetPathOverride(path string) {
-	pathOverride = strings.TrimSpace(path)
+type Config struct {
+	Backend                 Backend
+	SQLitePath, DatabaseURL string
+	Source                  PathSource
 }
 
-// GetDB returns a ready-to-use database handle
+var pathOverride, databaseURLOverride string
+var sharedMu sync.Mutex
+var sharedDB *sql.DB
+var sharedConfig Config
+
+func SetPathOverride(path string) {
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	pathOverride = strings.TrimSpace(path)
+	closeSharedLocked()
+}
+func SetDatabaseURLOverride(value string) {
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	databaseURLOverride = strings.TrimSpace(value)
+	closeSharedLocked()
+}
+
+func ResolveConfig() (Config, error) {
+	return resolveConfig(pathOverride, databaseURLOverride, os.Getenv, runtime.GOOS, os.UserHomeDir)
+}
+
+func resolveConfig(pathFlag, urlFlag string, getenv func(string) string, goos string, userHomeDir func() (string, error)) (Config, error) {
+	pathFlag, urlFlag = strings.TrimSpace(pathFlag), strings.TrimSpace(urlFlag)
+	if pathFlag != "" && urlFlag != "" {
+		return Config{}, errors.New("--db and --database-url cannot be used together")
+	}
+	if urlFlag != "" {
+		return postgresConfig(urlFlag, PathSourceFlag)
+	}
+	if pathFlag != "" {
+		return Config{Backend: BackendSQLite, SQLitePath: filepath.Clean(pathFlag), Source: PathSourceFlag}, nil
+	}
+	pathEnv, urlEnv := strings.TrimSpace(getenv("AQUALOG_DB")), strings.TrimSpace(getenv("AQUALOG_DATABASE_URL"))
+	if pathEnv != "" && urlEnv != "" {
+		return Config{}, errors.New("AQUALOG_DB and AQUALOG_DATABASE_URL cannot both be set")
+	}
+	if urlEnv != "" {
+		return postgresConfig(urlEnv, PathSourceEnv)
+	}
+	if pathEnv != "" {
+		return Config{Backend: BackendSQLite, SQLitePath: filepath.Clean(pathEnv), Source: PathSourceEnv}, nil
+	}
+	dir, err := defaultDataDir(getenv, goos, userHomeDir)
+	if err != nil {
+		return Config{}, err
+	}
+	return Config{Backend: BackendSQLite, SQLitePath: filepath.Join(dir, "aqualog.db"), Source: PathSourceDefault}, nil
+}
+
+func postgresConfig(value string, source PathSource) (Config, error) {
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" || strings.TrimPrefix(u.Path, "/") == "" {
+		return Config{}, errors.New("database URL must be a valid postgres:// or postgresql:// URL with host and database")
+	}
+	return Config{Backend: BackendPostgres, DatabaseURL: value, Source: source}, nil
+}
+
 func GetDB() (*sql.DB, error) {
-	dbPath, err := Path()
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	cfg, err := ResolveConfig()
 	if err != nil {
 		return nil, err
 	}
-
-	//Ensure directory exists
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create db directory: %w", err)
+	if sharedDB != nil && sharedConfig == cfg {
+		if err := sharedDB.Ping(); err == nil {
+			return sharedDB, nil
+		}
+		closeSharedLocked()
 	}
+	sharedDB, err = Open(context.Background(), cfg)
+	if err == nil {
+		sharedConfig = cfg
+	}
+	return sharedDB, err
+}
 
-	// Open DB (created automatically if missing)
-	database, err := sql.Open("sqlite3", dbPath)
+func Close() error {
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+	if sharedDB == nil {
+		return nil
+	}
+	err := sharedDB.Close()
+	sharedDB = nil
+	sharedConfig = Config{}
+	return err
+}
+
+func closeSharedLocked() {
+	if sharedDB != nil {
+		_ = sharedDB.Close()
+	}
+	sharedDB = nil
+	sharedConfig = Config{}
+}
+
+func Open(ctx context.Context, cfg Config) (*sql.DB, error) {
+	var driver, dsn string
+	switch cfg.Backend {
+	case BackendSQLite:
+		if cfg.SQLitePath == "" {
+			return nil, errors.New("SQLite path is empty")
+		}
+		if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0755); err != nil {
+			return nil, fmt.Errorf("failed to create db directory: %w", err)
+		}
+		driver, dsn = "sqlite3", cfg.SQLitePath
+	case BackendPostgres:
+		driver, dsn = "pgx", cfg.DatabaseURL
+	default:
+		return nil, fmt.Errorf("unsupported database backend %q", cfg.Backend)
+	}
+	database, err := sql.Open(driver, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db: %w", err)
+		return nil, fmt.Errorf("failed to open %s database: %w", cfg.Backend, err)
 	}
-
-	//Apply schema (runs safely every time)
-	if err := applySchema(database); err != nil {
+	if cfg.Backend == BackendPostgres {
+		database.SetMaxOpenConns(4)
+		database.SetMaxIdleConns(2)
+		database.SetConnMaxIdleTime(5 * time.Minute)
+	}
+	if err := database.PingContext(ctx); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("failed to connect to %s database: %w", cfg.Backend, err)
+	}
+	if err := applySchema(ctx, database, cfg.Backend); err != nil {
+		database.Close()
 		return nil, err
 	}
-	if err := migrate(database); err != nil {
-		return nil, err
-	}
-
 	return database, nil
 }
 
 func ResolvePath() (PathInfo, error) {
-	return resolvePath(pathOverride, os.Getenv, runtime.GOOS, os.UserHomeDir)
+	cfg, err := ResolveConfig()
+	if err != nil {
+		return PathInfo{}, err
+	}
+	if cfg.Backend != BackendSQLite {
+		return PathInfo{}, errors.New("selected database backend does not use a filesystem path")
+	}
+	return PathInfo{Path: cfg.SQLitePath, Source: cfg.Source}, nil
 }
 
 func Path() (string, error) {
@@ -77,18 +200,11 @@ func Path() (string, error) {
 }
 
 func resolvePath(override string, getenv func(string) string, goos string, userHomeDir func() (string, error)) (PathInfo, error) {
-	if path := strings.TrimSpace(override); path != "" {
-		return PathInfo{Path: filepath.Clean(path), Source: PathSourceFlag}, nil
-	}
-	if path := strings.TrimSpace(getenv("AQUALOG_DB")); path != "" {
-		return PathInfo{Path: filepath.Clean(path), Source: PathSourceEnv}, nil
-	}
-
-	dir, err := defaultDataDir(getenv, goos, userHomeDir)
+	cfg, err := resolveConfig(override, "", getenv, goos, userHomeDir)
 	if err != nil {
 		return PathInfo{}, err
 	}
-	return PathInfo{Path: filepath.Join(dir, "aqualog.db"), Source: PathSourceDefault}, nil
+	return PathInfo{Path: cfg.SQLitePath, Source: cfg.Source}, nil
 }
 
 func defaultDataDir(getenv func(string) string, goos string, userHomeDir func() (string, error)) (string, error) {
@@ -120,33 +236,51 @@ func defaultDataDir(getenv func(string) string, goos string, userHomeDir func() 
 	}
 }
 
-func applySchema(db *sql.DB) error {
-	schemaBytes, err := schemaFS.ReadFile("schema.sql")
+func applySchema(ctx context.Context, database *sql.DB, backend Backend) error {
+	name := "schema.sql"
+	if backend == BackendPostgres {
+		name = "schema_postgres.sql"
+	}
+	b, err := schemaFS.ReadFile(name)
 	if err != nil {
 		return fmt.Errorf("failed to read schema: %w", err)
 	}
-
-	_, err = db.Exec(string(schemaBytes))
-	if err != nil {
-		return fmt.Errorf("failed to apply schema: %w", err)
+	if backend == BackendPostgres {
+		conn, err := database.Conn(ctx)
+		if err != nil {
+			return fmt.Errorf("acquire schema connection: %w", err)
+		}
+		defer conn.Close()
+		if _, err := conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtext('aqualog_schema'))`); err != nil {
+			return fmt.Errorf("lock schema: %w", err)
+		}
+		defer conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock(hashtext('aqualog_schema'))`)
+		tx, err := conn.BeginTx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin schema migration: %w", err)
+		}
+		defer tx.Rollback()
+		for _, statement := range strings.Split(string(b), ";") {
+			if strings.TrimSpace(statement) == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("failed to apply %s schema: %w", backend, err)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit schema migration: %w", err)
+		}
+		return nil
 	}
-
-	return nil
+	if _, err := database.ExecContext(ctx, string(b)); err != nil {
+		return fmt.Errorf("failed to apply %s schema: %w", backend, err)
+	}
+	return migrateSQLite(database)
 }
 
-func migrate(db *sql.DB) error {
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
-		version INTEGER PRIMARY KEY,
-		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	)`); err != nil {
-		return err
-	}
-
-	type columnMigration struct {
-		table string
-		name  string
-		sql   string
-	}
+func migrateSQLite(database *sql.DB) error {
+	type columnMigration struct{ table, name, sql string }
 	columns := []columnMigration{
 		{"loggers", "role", `ALTER TABLE loggers ADD COLUMN role TEXT DEFAULT 'water_level'`},
 		{"logger_files", "measurement_kind", `ALTER TABLE logger_files ADD COLUMN measurement_kind TEXT`},
@@ -157,76 +291,37 @@ func migrate(db *sql.DB) error {
 		{"logger_data", "baro_corrected_m", `ALTER TABLE logger_data ADD COLUMN baro_corrected_m REAL`},
 		{"logger_data", "correction_run_id", `ALTER TABLE logger_data ADD COLUMN correction_run_id INTEGER`},
 	}
-
 	for _, c := range columns {
-		exists, err := columnExists(db, c.table, c.name)
+		exists, err := columnExists(database, c.table, c.name)
 		if err != nil {
 			return err
 		}
 		if !exists {
-			if _, err := db.Exec(c.sql); err != nil {
+			if _, err := database.Exec(c.sql); err != nil {
 				return fmt.Errorf("migration add %s.%s: %w", c.table, c.name, err)
 			}
 		}
 	}
-
-	if _, err := db.Exec(`UPDATE loggers SET role = 'water_level' WHERE role IS NULL OR role = ''`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`UPDATE logger_data SET imported_value = level_m WHERE imported_value IS NULL`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`UPDATE logger_data SET imported_unit = 'm' WHERE imported_unit IS NULL OR imported_unit = ''`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`UPDATE logger_data SET imported_kind = 'manufacturer_compensated_level_m' WHERE imported_kind IS NULL OR imported_kind = ''`); err != nil {
-		return err
-	}
-
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS baro_assignments (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			scope TEXT NOT NULL,
-			scope_id INTEGER NOT NULL,
-			barologger_id INTEGER NOT NULL,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(scope, scope_id),
-			FOREIGN KEY (barologger_id) REFERENCES loggers(id) ON DELETE CASCADE
-		);
-		CREATE TABLE IF NOT EXISTS correction_runs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			site_id INTEGER NOT NULL,
-			logger_id INTEGER,
-			barologger_id INTEGER NOT NULL,
-			method TEXT NOT NULL,
-			density_mode TEXT NOT NULL,
-			density_kg_m3 REAL NOT NULL,
-			match_mode TEXT NOT NULL,
-			max_gap_seconds INTEGER NOT NULL,
-			notes TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
-			FOREIGN KEY (logger_id) REFERENCES loggers(id) ON DELETE SET NULL,
-			FOREIGN KEY (barologger_id) REFERENCES loggers(id) ON DELETE CASCADE
-		);
+	_, err := database.Exec(`
+		UPDATE loggers SET role = 'water_level' WHERE role IS NULL OR role = '';
+		UPDATE logger_data SET imported_value = level_m WHERE imported_value IS NULL;
+		UPDATE logger_data SET imported_unit = 'm' WHERE imported_unit IS NULL OR imported_unit = '';
+		UPDATE logger_data SET imported_kind = 'manufacturer_compensated_level_m' WHERE imported_kind IS NULL OR imported_kind = '';
 		INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
 	`)
 	return err
 }
 
-func columnExists(db *sql.DB, table string, column string) (bool, error) {
-	rows, err := db.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+func columnExists(database *sql.DB, table, column string) (bool, error) {
+	rows, err := database.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, table))
 	if err != nil {
 		return false, err
 	}
 	defer rows.Close()
-
 	for rows.Next() {
-		var cid int
+		var cid, notNull, pk int
 		var name, typ string
-		var notNull int
 		var defaultValue any
-		var pk int
 		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
 			return false, err
 		}
@@ -235,4 +330,16 @@ func columnExists(db *sql.DB, table string, column string) (bool, error) {
 		}
 	}
 	return false, rows.Err()
+}
+
+func RedactedLocation(cfg Config) string {
+	if cfg.Backend == BackendSQLite {
+		return cfg.SQLitePath
+	}
+	u, err := url.Parse(cfg.DatabaseURL)
+	if err != nil {
+		return "<invalid PostgreSQL URL>"
+	}
+	u.User = nil
+	return u.Redacted()
 }

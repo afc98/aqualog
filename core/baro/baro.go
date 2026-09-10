@@ -72,13 +72,12 @@ func Assign(scope string, scopeID int, barologgerID int) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
 	if err := requireLoggerRole(d, barologgerID, "barometric"); err != nil {
 		return err
 	}
 	_, err = d.Exec(`
 		INSERT INTO baro_assignments(scope, scope_id, barologger_id)
-		VALUES (?, ?, ?)
+		VALUES ($1, $2, $3)
 		ON CONFLICT(scope, scope_id) DO UPDATE SET
 			barologger_id = excluded.barologger_id,
 			created_at = CURRENT_TIMESTAMP
@@ -109,7 +108,7 @@ func requireLoggerRole(d *sql.DB, loggerID int, want string) error {
 
 func loggerRole(d *sql.DB, loggerID int) (string, error) {
 	var role sql.NullString
-	err := d.QueryRow(`SELECT role FROM loggers WHERE id = ?`, loggerID).Scan(&role)
+	err := d.QueryRow(`SELECT role FROM loggers WHERE id = $1`, loggerID).Scan(&role)
 	if err == sql.ErrNoRows {
 		return "", fmt.Errorf("logger %d not found", loggerID)
 	}
@@ -134,7 +133,6 @@ func Correct(opts CorrectOptions) (CorrectResult, error) {
 	if err != nil {
 		return CorrectResult{}, err
 	}
-	defer d.Close()
 
 	if opts.BarologgerID == 0 {
 		opts.BarologgerID, err = resolveAssignedBarologger(d, opts.SiteID)
@@ -198,8 +196,8 @@ func Correct(opts CorrectOptions) (CorrectResult, error) {
 		}
 		if _, err := tx.Exec(`
 			UPDATE logger_data
-			SET baro_corrected_m = ?, level_m = ?, correction_run_id = ?
-			WHERE id = ?
+			SET baro_corrected_m = $1, level_m = $2, correction_run_id = $3
+			WHERE id = $4
 		`, head, head, runID, row.id); err != nil {
 			return CorrectResult{}, err
 		}
@@ -210,7 +208,7 @@ func Correct(opts CorrectOptions) (CorrectResult, error) {
 		}
 	}
 
-	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, opts.SiteID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = $1`, opts.SiteID); err != nil {
 		return CorrectResult{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -224,15 +222,14 @@ func SiteStatus(siteID int) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	defer d.Close()
 
 	var out Status
 	rows, err := d.Query(`
 		SELECT a.scope, a.scope_id, a.barologger_id, l.name
 		FROM baro_assignments a
 		JOIN loggers l ON l.id = a.barologger_id
-		WHERE (a.scope = 'site' AND a.scope_id = ?)
-		   OR (a.scope = 'project' AND a.scope_id = (SELECT project_id FROM sites WHERE id = ?))
+		WHERE (a.scope = 'site' AND a.scope_id = $1)
+		   OR (a.scope = 'project' AND a.scope_id = (SELECT project_id FROM sites WHERE id = $2))
 		ORDER BY a.scope
 	`, siteID, siteID)
 	if err != nil {
@@ -250,7 +247,7 @@ func SiteStatus(siteID int) (Status, error) {
 	runRows, err := d.Query(`
 		SELECT id, site_id, logger_id, barologger_id, method, density_mode, density_kg_m3, max_gap_seconds, created_at
 		FROM correction_runs
-		WHERE site_id = ?
+		WHERE site_id = $1
 		ORDER BY id DESC
 		LIMIT 10
 	`, siteID)
@@ -270,7 +267,7 @@ func SiteStatus(siteID int) (Status, error) {
 
 func resolveAssignedBarologger(d *sql.DB, siteID int) (int, error) {
 	var id int
-	err := d.QueryRow(`SELECT barologger_id FROM baro_assignments WHERE scope = 'site' AND scope_id = ?`, siteID).Scan(&id)
+	err := d.QueryRow(`SELECT barologger_id FROM baro_assignments WHERE scope = 'site' AND scope_id = $1`, siteID).Scan(&id)
 	if err == nil {
 		return id, nil
 	}
@@ -278,7 +275,7 @@ func resolveAssignedBarologger(d *sql.DB, siteID int) (int, error) {
 		SELECT barologger_id
 		FROM baro_assignments
 		WHERE scope = 'project'
-		  AND scope_id = (SELECT project_id FROM sites WHERE id = ?)
+		  AND scope_id = (SELECT project_id FROM sites WHERE id = $1)
 	`, siteID).Scan(&id)
 	if err == nil {
 		return id, nil
@@ -290,7 +287,7 @@ func loadBaroRows(d *sql.DB, loggerID int) ([]pressurePoint, error) {
 	rows, err := d.Query(`
 		SELECT timestamp, imported_value, imported_kind
 		FROM logger_data
-		WHERE logger_id = ?
+		WHERE logger_id = $1
 		  AND imported_kind IN ('barometric_pressure_mbar', 'barometric_pressure_kpa')
 		ORDER BY timestamp
 	`, loggerID)
@@ -318,14 +315,14 @@ func loadWaterRows(d *sql.DB, siteID int, loggerID int) ([]waterRow, error) {
 	args := []any{siteID}
 	filter := ""
 	if loggerID > 0 {
-		filter = " AND d.logger_id = ?"
+		filter = " AND d.logger_id = $2"
 		args = append(args, loggerID)
 	}
 	rows, err := d.Query(`
 		SELECT d.id, d.logger_id, d.timestamp, d.imported_value, d.imported_unit, d.imported_kind
 		FROM logger_data d
 		JOIN loggers l ON l.id = d.logger_id
-		WHERE l.site_id = ?
+		WHERE l.site_id = $1
 		  AND d.imported_kind IN ('absolute_pressure_mbar', 'absolute_pressure_kpa', 'absolute_pressure_head_m')
 	`+filter+`
 		ORDER BY d.logger_id, d.timestamp
@@ -352,15 +349,16 @@ func loadWaterRows(d *sql.DB, siteID int, loggerID int) ([]waterRow, error) {
 }
 
 func insertRun(tx *sql.Tx, opts CorrectOptions) (int, error) {
-	res, err := tx.Exec(`
+	var id int
+	err := tx.QueryRow(`
 		INSERT INTO correction_runs(site_id, logger_id, barologger_id, method, density_mode, density_kg_m3, match_mode, max_gap_seconds, notes)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, opts.SiteID, nullInt(opts.LoggerID), opts.BarologgerID, "barometric", opts.DensityMode, opts.Density, "linear_interpolation", int(opts.MaxGap.Seconds()), opts.Notes)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id
+	`, opts.SiteID, nullInt(opts.LoggerID), opts.BarologgerID, "barometric", opts.DensityMode, opts.Density, "linear_interpolation", int(opts.MaxGap.Seconds()), opts.Notes).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
-	id, err := res.LastInsertId()
-	return int(id), err
+	return id, nil
 }
 
 func nullInt(v int) any {

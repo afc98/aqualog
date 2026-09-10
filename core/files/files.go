@@ -24,12 +24,11 @@ func List(siteID int, loggerID int) ([]LoggerFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer d.Close()
 
 	args := []any{siteID}
 	filter := ""
 	if loggerID > 0 {
-		filter = " AND l.id = ?"
+		filter = " AND l.id = $2"
 		args = append(args, loggerID)
 	}
 	rows, err := d.Query(`
@@ -37,7 +36,7 @@ func List(siteID int, loggerID int) ([]LoggerFile, error) {
 			(SELECT COUNT(*) FROM logger_data d WHERE d.logger_file_id = f.id)
 		FROM logger_files f
 		JOIN loggers l ON l.id = f.logger_id
-		WHERE l.site_id = ?`+filter+`
+		WHERE l.site_id = $1`+filter+`
 		ORDER BY f.timestamp, f.id
 	`, args...)
 	if err != nil {
@@ -82,14 +81,13 @@ func Remove(id int) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	defer d.Close()
 
 	var siteID int
 	err = d.QueryRow(`
 		SELECT l.site_id
 		FROM logger_files f
 		JOIN loggers l ON l.id = f.logger_id
-		WHERE f.id = ?
+		WHERE f.id = $1
 	`, id).Scan(&siteID)
 	if err != nil {
 		return 0, 0, err
@@ -103,15 +101,15 @@ func Remove(id int) (int, int, error) {
 
 	// Corrected rows reference raw logger data. Invalidate them first so raw-row
 	// deletion does not repeatedly scan or cascade through corrected_data.
-	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = $1`, siteID); err != nil {
 		return 0, 0, fmt.Errorf("failed to invalidate corrected data: %w", err)
 	}
-	res, err := tx.Exec(`DELETE FROM logger_data WHERE logger_file_id = ?`, id)
+	res, err := tx.Exec(`DELETE FROM logger_data WHERE logger_file_id = $1`, id)
 	if err != nil {
 		return 0, 0, err
 	}
 	rows, _ := res.RowsAffected()
-	if _, err := tx.Exec(`DELETE FROM logger_files WHERE id = ?`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM logger_files WHERE id = $1`, id); err != nil {
 		return 0, 0, err
 	}
 	if err := tx.Commit(); err != nil {

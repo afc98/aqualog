@@ -29,7 +29,6 @@ func Add(p AddParams) (Logger, error) {
 	if err != nil {
 		return Logger{}, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	role := p.Role
 	if role == "" {
@@ -37,21 +36,17 @@ func Add(p AddParams) (Logger, error) {
 	}
 
 	// Insert logger
-	result, err := database.Exec(
-		`INSERT INTO loggers (site_id, name, model, serial_number, role) VALUES (?, ?, ?, ?, ?)`,
+	var id int
+	err = database.QueryRow(
+		`INSERT INTO loggers (site_id, name, model, serial_number, role) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 		p.SiteID, p.Name, p.Model, p.Serial, role,
-	)
+	).Scan(&id)
 	if err != nil {
 		return Logger{}, fmt.Errorf("failed to add logger: %w", err)
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Logger{}, err
-	}
-
 	return Logger{
-		ID:     int(id),
+		ID:     id,
 		SiteID: p.SiteID,
 		Name:   p.Name,
 		Model:  p.Model,
@@ -70,12 +65,11 @@ func List(SiteID int) ([]Logger, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	// Query projects
 	rows, err := database.Query(`
 	SELECT id, site_id, name, model, serial_number, role
-	FROM loggers WHERE site_id=?
+	FROM loggers WHERE site_id=$1
 	ORDER BY id
 	`, SiteID)
 	if err != nil {
@@ -120,24 +114,23 @@ func Update(id int, name string, model string, serial string, role string) error
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 	if name != "" {
-		if _, err := database.Exec(`UPDATE loggers SET name = ? WHERE id = ?`, name, id); err != nil {
+		if _, err := database.Exec(`UPDATE loggers SET name = $1 WHERE id = $2`, name, id); err != nil {
 			return err
 		}
 	}
 	if model != "" {
-		if _, err := database.Exec(`UPDATE loggers SET model = ? WHERE id = ?`, model, id); err != nil {
+		if _, err := database.Exec(`UPDATE loggers SET model = $1 WHERE id = $2`, model, id); err != nil {
 			return err
 		}
 	}
 	if serial != "" {
-		if _, err := database.Exec(`UPDATE loggers SET serial_number = ? WHERE id = ?`, serial, id); err != nil {
+		if _, err := database.Exec(`UPDATE loggers SET serial_number = $1 WHERE id = $2`, serial, id); err != nil {
 			return err
 		}
 	}
 	if role != "" {
-		if _, err := database.Exec(`UPDATE loggers SET role = ? WHERE id = ?`, role, id); err != nil {
+		if _, err := database.Exec(`UPDATE loggers SET role = $1 WHERE id = $2`, role, id); err != nil {
 			return err
 		}
 	}
@@ -149,7 +142,6 @@ func Remove(id int) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
-	_, err = database.Exec(`DELETE FROM loggers WHERE id = ?`, id)
+	_, err = database.Exec(`DELETE FROM loggers WHERE id = $1`, id)
 	return err
 }

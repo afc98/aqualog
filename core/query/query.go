@@ -49,31 +49,30 @@ func QueryLoggerDataWithOptions(siteID int, opts Options) ([]LoggerDataRow, erro
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer dbConn.Close()
 
 	sqlText := `
 	SELECT id, logger_id, timestamp, level_m, imported_value, imported_unit, imported_kind, baro_corrected_m, correction_run_id, temp_c, sal_psu, ec_us
 	FROM logger_data
 	WHERE logger_id IN (
-		SELECT id FROM loggers WHERE site_id = ?
+		SELECT id FROM loggers WHERE site_id = $1
 	)
 	`
 	args := []any{siteID}
 	if opts.LoggerID > 0 {
-		sqlText += " AND logger_id = ?"
+		sqlText += fmt.Sprintf(" AND logger_id = $%d", len(args)+1)
 		args = append(args, opts.LoggerID)
 	}
 	if opts.From != "" {
-		sqlText += " AND timestamp >= ?"
+		sqlText += fmt.Sprintf(" AND timestamp >= $%d", len(args)+1)
 		args = append(args, opts.From)
 	}
 	if opts.To != "" {
-		sqlText += " AND timestamp <= ?"
+		sqlText += fmt.Sprintf(" AND timestamp <= $%d", len(args)+1)
 		args = append(args, opts.To)
 	}
 	sqlText += " ORDER BY timestamp ASC"
 	if opts.Limit > 0 {
-		sqlText += " LIMIT ?"
+		sqlText += fmt.Sprintf(" LIMIT $%d", len(args)+1)
 		args = append(args, opts.Limit)
 	}
 
@@ -105,25 +104,24 @@ func QueryCorrectedDataWithOptions(siteID int, opts Options) ([]CorrectedDataRow
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer dbConn.Close()
 
 	sqlText := `
 	SELECT id, site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
 	FROM corrected_data
-	WHERE site_id = ?
+	WHERE site_id = $1
 	`
 	args := []any{siteID}
 	if opts.From != "" {
-		sqlText += " AND timestamp >= ?"
+		sqlText += fmt.Sprintf(" AND timestamp >= $%d", len(args)+1)
 		args = append(args, opts.From)
 	}
 	if opts.To != "" {
-		sqlText += " AND timestamp <= ?"
+		sqlText += fmt.Sprintf(" AND timestamp <= $%d", len(args)+1)
 		args = append(args, opts.To)
 	}
 	sqlText += " ORDER BY timestamp ASC"
 	if opts.Limit > 0 {
-		sqlText += " LIMIT ?"
+		sqlText += fmt.Sprintf(" LIMIT $%d", len(args)+1)
 		args = append(args, opts.Limit)
 	}
 

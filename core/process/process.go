@@ -122,7 +122,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 			d.ec_us
 		FROM logger_data d
 		JOIN loggers l ON l.id = d.logger_id
-		WHERE l.site_id = ?
+		WHERE l.site_id = $1
 		  AND COALESCE(NULLIF(l.role, ''), 'water_level') = 'water_level'
 		ORDER BY d.logger_id ASC, d.timestamp ASC
 	`, siteID)
@@ -183,7 +183,7 @@ func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 			m.timestamp,
 			m.value
 		FROM manual_readings m
-		WHERE m.site_id = ?
+		WHERE m.site_id = $1
 		ORDER BY m.timestamp ASC
 	`, siteID)
 	if err != nil {
@@ -222,7 +222,7 @@ func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 			e.event_type
 		FROM logger_events e
 		JOIN loggers l ON l.id = e.logger_id
-		WHERE l.site_id = ?
+		WHERE l.site_id = $1
 		  AND COALESCE(NULLIF(l.role, ''), 'water_level') = 'water_level'
 		ORDER BY e.logger_id ASC, e.timestamp ASC
 	`, siteID)
@@ -351,7 +351,7 @@ func StoreCorrectedRows(
 	}
 
 	// 1️⃣ Delete all existing corrected rows for this site
-	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = $1`, siteID); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("failed to delete old corrected rows: %w", err)
 	}
@@ -373,7 +373,8 @@ func StoreCorrectedRows(
 		args := make([]any, 0, (end-i)*7)
 
 		for _, row := range rows[i:end] {
-			query += "(?, ?, ?, ?, ?, ?, ?),"
+			base := len(args)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d),", base+1, base+2, base+3, base+4, base+5, base+6, base+7)
 			args = append(args,
 				siteID,
 				row.RawID,

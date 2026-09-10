@@ -77,7 +77,6 @@ func BuildExport(siteID int) ([]ExportRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer dbConn.Close()
 
 	rawRows, err := process.LoadRawData(dbConn, siteID)
 	if err != nil {
@@ -316,7 +315,7 @@ func loadCorrectedData(dbConn *sql.DB, siteID int) ([]LoggerCorrectedRow, error)
 			d.ec_us
 		FROM corrected_data c
 		JOIN logger_data d ON d.id = c.logger_data_id
-		WHERE c.site_id = ?
+		WHERE c.site_id = $1
 		ORDER BY c.timestamp ASC
 	`, siteID)
 	if err != nil {
@@ -401,8 +400,8 @@ func loggerAt(db *sql.DB, siteID int, t time.Time) (name, model, serial string, 
 		SELECT l.name, l.model, l.serial_number
 		FROM logger_events e
 		JOIN loggers l ON l.id = e.logger_id
-		WHERE e.logger_id IN (SELECT id FROM loggers WHERE site_id=?)
-		  AND e.timestamp <= ?
+		WHERE e.logger_id IN (SELECT id FROM loggers WHERE site_id=$1)
+		  AND e.timestamp <= $2
 		  AND e.event_type IN ('installed', 'removed')
 		ORDER BY e.timestamp DESC
 		LIMIT 1

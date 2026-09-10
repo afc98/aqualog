@@ -25,7 +25,6 @@ var processCmd = &cobra.Command{
 			fmt.Println("Database error:", err)
 			return
 		}
-		defer database.Close()
 		fmt.Println("Processing logger data...")
 		err = process.ProcessLoggerData(database, siteID)
 		if err != nil {
