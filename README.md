@@ -41,7 +41,7 @@ and place the `aqualog` executable somewhere on your `PATH`.
 Aqualog uses [`go-sqlite3`](https://github.com/mattn/go-sqlite3), which embeds
 SQLite through CGO. Building from source requires:
 
-- Go 1.25.1 or newer.
+- Go 1.26.10 or newer.
 - `CGO_ENABLED=1` (the default when a suitable C compiler is available).
 - A C compiler on `PATH`: GCC/build tools on Linux, Xcode Command Line Tools on
   macOS, or a 64-bit MinGW GCC toolchain on Windows.
@@ -250,6 +250,17 @@ Remove commands are destructive and require `--confirm`:
 ./aqualog manual remove --id 1
 ```
 
+When a logger is reinstalled without a new field measurement, an estimated
+reading can be carried forward from its previous deployment:
+
+```bash
+./aqualog manual carry-forward --site "Site 1" --logger "Logger 1" --time "2026-10-23T09:00:00" --max-lookback 1h
+```
+
+This uses the previous deployment's last corrected level, assumes no water-level
+change during the gap, and labels the new reading as an estimate. The site is
+reprocessed atomically by default; use `--reprocess=false` to only save the reading.
+
 ### Import Logger Data
 
 Supported import types are `aquaread`, `solinst`, and `insitu`.
@@ -275,6 +286,23 @@ Import all matching files in a directory:
 ```bash
 ./aqualog import-dir --type aquaread --site "Site 1" --logger "Logger 1" --dir "path/to/files" --pattern "*.tab"
 ```
+
+### Dataset Clock Times
+
+Dataset timestamps represent clock times without a timezone. By default, imports
+keep the clock fields from the file and discard any timezone offset, reporting a
+warning. To convert timestamps that contain timezone information before storing
+their clock fields, specify an IANA timezone:
+
+```bash
+./aqualog import --type insitu --site "Site 1" --logger "Logger 1" --file "path/to/file.csv" --target-timezone Europe/London
+```
+
+Timestamps without timezone information are left unchanged. The same option is
+available for directory and barometric imports. JSON and export timestamps omit
+timezone suffixes; consumers should interpret them using the dataset's clock convention.
+Existing PostgreSQL dataset timestamp columns migrate automatically on opening
+the database, preserving their UTC clock fields. Back up the database before upgrading.
 
 ### Manage Imported Files
 
@@ -432,6 +460,7 @@ Optional salinity and conductivity measurements remain in the export schema. Mis
 | `logger add/list/update/remove`                              | Manage loggers                                                         |
 | `event add/list/update/remove`                               | Manage logger events                                                   |
 | `manual add/list/update/remove`                              | Manage manual water-level readings                                     |
+| `manual carry-forward`                                      | Estimate a reading from the previous deployment                        |
 | `import`                                                     | Import one logger file                                                 |
 | `import-dir`                                                 | Import multiple logger files from a directory                          |
 | `files list/remove`                                          | Review or remove imported files                                        |

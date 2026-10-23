@@ -1,14 +1,11 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
-The format follows Keep a Changelog. Versions follow Semantic Versioning;
-the next planned release is **0.2.0** because it adds substantial functionality
-and changes data representation while the project is still pre-1.0.
+The format follows Keep a Changelog. Versions follow Semantic Versioning.
 
-## [Unreleased] — planned v0.2.0
+## [Unreleased]
 
-Changes below compare the current branch with the published v0.1.0 release.
-No release date has been assigned.
+## [0.2.0] - 2026-10-23
 
 ### Added
 
@@ -58,6 +55,8 @@ No release date has been assigned.
 
 ### Fixed
 
+- Site validation no longer rejects an ongoing installation merely because its
+  removal event has not occurred.
 - SQLite locking during project-wide batch barometric correction.
 - In-Situ parsing of mbar pressure columns, including files that also contain
   depth columns, and BaroTROLL exports without temperature. Missing imported
@@ -65,7 +64,13 @@ No release date has been assigned.
 - Parsing of timezone-bearing timestamps, Aquaread fractional seconds, and
   Solinst timestamps with abbreviated month names and 24-hour times.
 
-### Compatibility and release preparation
+### Security
+
+- Build with Go 1.26.10 or newer to include standard-library security fixes.
+- Update pgx to v5.9.2 and `golang.org/x/text` to v0.41.0 to address reachable
+  vulnerabilities reported by `govulncheck`.
+
+### Compatibility
 
 - Consumers that require timezone-bearing dataset timestamps must adapt to the
   clock-only representation. Back up an existing PostgreSQL database before the
@@ -74,8 +79,6 @@ No release date has been assigned.
 - The CLI-only interface, canonical `github.com/afc98/aqualog` module path,
   binary-release automation, Dependabot, and CI quality and vulnerability checks
   from v0.1.0 are retained. PostgreSQL integration coverage supplements those checks.
-- Before tagging v0.2.0, move these unreleased notes into a dated `## [0.2.0]`
-  section so the release workflow can extract them.
 
 ## [0.1.0] - 2026-08-08
 
@@ -96,5 +99,6 @@ No release date has been assigned.
   and configurable database paths.
 - Native release binaries for Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/afc98/aqualog/compare/v0.1.0...feature/dual-database-backends
+[Unreleased]: https://github.com/afc98/aqualog/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/afc98/aqualog/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/afc98/aqualog/releases/tag/v0.1.0

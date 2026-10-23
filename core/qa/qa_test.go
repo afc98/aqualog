@@ -48,6 +48,38 @@ func TestValidateSiteIgnoresBarometricLoggerEvents(t *testing.T) {
 	}
 }
 
+func TestValidateSiteAllowsOngoingInstallation(t *testing.T) {
+	db.SetPathOverride(filepath.Join(t.TempDir(), "ongoing.db"))
+	t.Cleanup(func() { db.SetPathOverride("") })
+	database, err := db.GetDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = database.Exec(`
+		INSERT INTO projects(id, name) VALUES (1, 'Project');
+		INSERT INTO sites(id, project_id, name) VALUES (1, 1, 'Site');
+		INSERT INTO loggers(id, site_id, name) VALUES (1, 1, 'Water');
+		INSERT INTO logger_files(id, logger_id, file) VALUES (1, 1, 'water.csv');
+		INSERT INTO logger_data(logger_id, logger_file_id, timestamp, level_m) VALUES
+			(1, 1, '2026-01-01T00:01:00', 10),
+			(1, 1, '2026-01-01T00:02:00', 11);
+		INSERT INTO manual_readings(site_id, timestamp, value) VALUES (1, '2026-01-01T00:01:00', 15);
+		INSERT INTO logger_events(logger_id, timestamp, event_type) VALUES (1, '2026-01-01T00:00:00', 'installed');
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues, err := ValidateSite(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, issue := range issues {
+		if issue.Severity == "error" {
+			t.Fatalf("ongoing installation rejected: %s", issue.Message)
+		}
+	}
+}
+
 func TestValidateSiteRecognizesCrossSiteCorrectionBarometer(t *testing.T) {
 	db.SetPathOverride(filepath.Join(t.TempDir(), "aqualog.db"))
 	t.Cleanup(func() { db.SetPathOverride("") })

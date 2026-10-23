@@ -161,7 +161,6 @@ func ValidateSite(siteID int) ([]ValidationIssue, error) {
 	defer rows.Close()
 
 	type loggerState struct {
-		name string
 		open bool
 	}
 	states := make(map[int]loggerState)
@@ -172,7 +171,6 @@ func ValidateSite(siteID int) ([]ValidationIssue, error) {
 			return nil, err
 		}
 		state := states[loggerID]
-		state.name = loggerName
 		switch typ {
 		case "installed":
 			if state.open {
@@ -187,11 +185,7 @@ func ValidateSite(siteID int) ([]ValidationIssue, error) {
 		}
 		states[loggerID] = state
 	}
-	for _, state := range states {
-		if state.open {
-			add("error", fmt.Sprintf("logger %q has an install event without a matching removal event", state.name))
-		}
-	}
+	// An open installation is an ongoing deployment, which processing supports.
 
 	dupRows, err := d.Query(`SELECT name, COUNT(*) FROM loggers WHERE site_id = $1 GROUP BY name HAVING COUNT(*) > 1`, siteID)
 	if err != nil {
