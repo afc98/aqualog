@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/logger"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/logger"
 
 	"github.com/spf13/cobra"
 )

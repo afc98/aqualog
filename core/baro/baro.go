@@ -1,10 +1,10 @@
 package baro
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/utils"
 	"math"
 	"sort"
 	"time"

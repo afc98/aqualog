@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"aqualog/core/event"
 	"bufio"
 	"fmt"
+	"github.com/afc98/aqualog/core/event"
 	"os"
 	"strings"
 

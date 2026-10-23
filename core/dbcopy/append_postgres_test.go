@@ -1,12 +1,12 @@
 package dbcopy_test
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/dbcopy"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/dbcopy"
 	"net/url"
 	"os"
 	"path/filepath"

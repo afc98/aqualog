@@ -1,13 +1,13 @@
 package db_test
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/dbcopy"
-	"aqualog/core/event"
-	"aqualog/core/logger"
-	"aqualog/core/manual"
-	"aqualog/core/project"
-	"aqualog/core/site"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/dbcopy"
+	"github.com/afc98/aqualog/core/event"
+	"github.com/afc98/aqualog/core/logger"
+	"github.com/afc98/aqualog/core/manual"
+	"github.com/afc98/aqualog/core/project"
+	"github.com/afc98/aqualog/core/site"
 	"os"
 	"path/filepath"
 	"testing"

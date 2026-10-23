@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"aqualog/core/manual"
 	"bufio"
 	"fmt"
+	"github.com/afc98/aqualog/core/manual"
 	"os"
 	"strings"
 

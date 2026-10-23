@@ -1,10 +1,10 @@
 package process
 
 import (
-	"aqualog/core/utils"
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/afc98/aqualog/core/utils"
 	"math"
 	"sort"
 	"time"

@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/process"
-	"aqualog/core/utils"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/process"
+	"github.com/afc98/aqualog/core/utils"
 	"github.com/spf13/cobra"
 	"time"
 )

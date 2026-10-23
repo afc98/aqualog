@@ -1,9 +1,9 @@
 package process
 
 import (
-	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
+	"github.com/afc98/aqualog/core/utils"
 	"sort"
 	"time"
 )

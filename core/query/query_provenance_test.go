@@ -1,7 +1,7 @@
 package query
 
 import (
-	"aqualog/core/db"
+	"github.com/afc98/aqualog/core/db"
 	"path/filepath"
 	"testing"
 	"time"

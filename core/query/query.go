@@ -1,11 +1,11 @@
 package query
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/utils"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/utils"
 	"time"
 )
 

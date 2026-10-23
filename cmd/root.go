@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"aqualog/core/db"
+	"github.com/afc98/aqualog/core/db"
 	"os"
 
 	"github.com/spf13/cobra"

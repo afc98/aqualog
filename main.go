@@ -1,7 +1,7 @@
 package main
 
 import (
-	"aqualog/cmd"
+	"github.com/afc98/aqualog/cmd"
 )
 
 func main() {

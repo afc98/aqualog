@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"aqualog/core/baro"
-	"aqualog/core/db"
 	"bytes"
+	"github.com/afc98/aqualog/core/baro"
+	"github.com/afc98/aqualog/core/db"
 	"strings"
 	"testing"
 )

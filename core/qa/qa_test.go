@@ -1,7 +1,7 @@
 package qa
 
 import (
-	"aqualog/core/db"
+	"github.com/afc98/aqualog/core/db"
 	"path/filepath"
 	"strings"
 	"testing"

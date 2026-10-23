@@ -1,9 +1,9 @@
 package plot
 
 import (
-	"aqualog/core/utils"
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/utils"
 	"html"
 	"image/color"
 	"math"

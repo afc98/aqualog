@@ -1,10 +1,10 @@
 package event
 
 import (
-	"aqualog/core/db"
-	"aqualog/core/utils"
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/utils"
 	"strings"
 	"time"
 )

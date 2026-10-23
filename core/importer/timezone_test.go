@@ -1,7 +1,7 @@
 package importer
 
 import (
-	"aqualog/core/parsers"
+	"github.com/afc98/aqualog/core/parsers"
 	"strings"
 	"testing"
 	"time"
