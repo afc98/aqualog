@@ -21,6 +21,7 @@ var importDirCmd = &cobra.Command{
 		role, _ := cmd.Flags().GetString("role")
 		measurementKind, _ := cmd.Flags().GetString("measurement-kind")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -52,6 +53,7 @@ var importDirCmd = &cobra.Command{
 				Role:            role,
 				MeasurementKind: measurementKind,
 				DateOrder:       dateOrder,
+				TargetTimezone:  targetTimezone,
 			}
 			meta, recs, err := importer.ParseLoggerFileWithOptions(fileType, filePath, options)
 			if err != nil {
@@ -73,6 +75,9 @@ var importDirCmd = &cobra.Command{
 			totalInserted += result.Inserted
 			totalSkipped += result.Skipped
 			totalReplaced += result.Replaced
+			if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+				fmt.Printf("%s: %s\n", filePath, warning)
+			}
 			fmt.Printf("OK %s: inserted=%d skipped=%d replaced=%d logger=%d\n", filePath, result.Inserted, result.Skipped, result.Replaced, result.LoggerID)
 		}
 		fmt.Printf("Summary: files=%d failed=%d inserted=%d skipped=%d replaced=%d\n", len(matches), failed, totalInserted, totalSkipped, totalReplaced)
@@ -87,6 +92,7 @@ func init() {
 	importDirCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
 	importDirCmd.Flags().String("role", "", "Logger role (water_level or barometric); inferred when omitted")
 	importDirCmd.Flags().String("measurement-kind", "", "Override parsed measurement kind")
+	importDirCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	importDirCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	importDirCmd.Flags().String("pattern", "*", "File glob pattern within the directory")
 	importDirCmd.Flags().Bool("replace", false, "Replace existing records for matching logger timestamps")

@@ -53,7 +53,7 @@ func ParseInsituWithOptions(path string, opts DateOptions) (*ParsedFile, error) 
 		// Identify start of data header - must be in Log Data section and have multiple columns
 		if inLogData && strings.HasPrefix(line, "Date and Time") {
 			parts := splitCSVInsitu(line)
-			if len(parts) > 3 {
+			if len(parts) >= 3 {
 				headerIndex = i
 				break
 			}
@@ -88,6 +88,11 @@ func parseInsituData(lines []string, headerIndex int, md Metadata, dateOrder str
 
 	idxTimestamp := indexOfContainsInsitu(headerCols, "date")
 	idxPressure := indexOfContainsInsitu(headerCols, "pressure (kpa)")
+	pressureUnit, pressureKind := "kPa", "absolute_pressure_kpa"
+	if idxPressure == -1 {
+		idxPressure = indexOfContainsInsitu(headerCols, "pressure (mbar)")
+		pressureUnit, pressureKind = "mbar", "absolute_pressure_mbar"
+	}
 	idxBaro := indexOfContainsInsitu(headerCols, "barometric pressure")
 	idxLevel := indexOfContainsInsitu(headerCols, "depth")
 	if idxLevel == -1 {
@@ -99,8 +104,8 @@ func parseInsituData(lines []string, headerIndex int, md Metadata, dateOrder str
 	idxEC := indexOfContainsInsitu(headerCols, "conductivity")
 	idxSal := indexOfContainsInsitu(headerCols, "salinity")
 
-	if idxTimestamp == -1 || idxTemp == -1 || (idxLevel == -1 && idxPressure == -1 && idxBaro == -1) {
-		return nil, fmt.Errorf("insitu: required columns missing (date, pressure/depth/barometric pressure, temperature) - found: %v", headerCols)
+	if idxTimestamp == -1 || (idxTemp == -1 && idxBaro == -1) || (idxLevel == -1 && idxPressure == -1 && idxBaro == -1) {
+		return nil, fmt.Errorf("insitu: required columns missing (date, pressure/depth/barometric pressure; temperature required for non-barometric data) - found: %v", headerCols)
 	}
 	if dateOrder == "auto" {
 		detected, err := detectInsituDateOrder(lines[headerIndex+1:], idxTimestamp)
@@ -136,25 +141,35 @@ func parseInsituData(lines []string, headerIndex int, md Metadata, dateOrder str
 			valueIdx = idxBaro
 			unit = "kPa"
 			kind = "barometric_pressure_kpa"
+			if strings.Contains(strings.ToLower(headerCols[idxBaro]), "mbar") {
+				unit = "mbar"
+				kind = "barometric_pressure_mbar"
+			}
 		} else if idxPressure != -1 {
 			valueIdx = idxPressure
-			unit = "kPa"
-			kind = "absolute_pressure_kpa"
+			unit = pressureUnit
+			kind = pressureKind
 		}
 		if valueIdx == -1 || len(parts) <= valueIdx {
 			continue
 		}
 		level := parseFloatInsitu(parts[valueIdx])
-		temp := parseFloatInsitu(parts[idxTemp])
+		// BaroTROLL exports can omit temperature entirely.
+		var temp float64
+		if idxTemp != -1 {
+			temp = parseFloatInsitu(parts[idxTemp])
+		}
 
 		rec := Record{
-			Timestamp:       ts,
-			LevelM:          level,
-			TempC:           temp,
-			Zero:            0,
-			ImportedValue:   level,
-			ImportedUnit:    unit,
-			MeasurementKind: kind,
+			Timestamp:          ts,
+			TimezonePresent:    HasTimeZoneSuffix(tsStr),
+			LevelM:             level,
+			TempC:              temp,
+			TemperatureMissing: idxTemp == -1,
+			Zero:               0,
+			ImportedValue:      level,
+			ImportedUnit:       unit,
+			MeasurementKind:    kind,
 		}
 
 		if idxEC != -1 && idxEC < len(parts) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/afc98/aqualog/core/db"
 	"github.com/afc98/aqualog/core/qa"
+	"github.com/afc98/aqualog/core/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -26,15 +27,15 @@ var statusCmd = &cobra.Command{
 		fmt.Printf("Site: %s (ID %d)\n", s.SiteName, s.SiteID)
 		fmt.Printf("Project: %s (ID %d)\n", s.ProjectName, s.ProjectID)
 		fmt.Printf("Loggers: %d, Files: %d, Events: %d, Manual readings: %d\n", s.LoggerCount, s.FileCount, s.EventCount, s.ManualCount)
-		fmt.Printf("Absolute-pressure rows: %d, Barometric rows: %d, Baro-corrected rows: %d\n", s.AbsoluteCount, s.BaroCount, s.BaroCorrected)
+		fmt.Printf("Absolute-pressure rows: %d, Local barometric rows: %d, Available barometric rows: %d, Baro-corrected rows: %d\n", s.AbsoluteCount, s.BaroCount, s.AvailableBaroCount, s.BaroCorrected)
 		fmt.Printf("Raw records: %d", s.RawCount)
 		if s.RawStart.Valid {
-			fmt.Printf(" (%s to %s)", s.RawStart.String, s.RawEnd.String)
+			fmt.Printf(" (%s to %s)", datasetClockLabel(s.RawStart.String), datasetClockLabel(s.RawEnd.String))
 		}
 		fmt.Println()
 		fmt.Printf("Corrected records: %d", s.CorrectedCount)
 		if s.CorrectedStart.Valid {
-			fmt.Printf(" (%s to %s)", s.CorrectedStart.String, s.CorrectedEnd.String)
+			fmt.Printf(" (%s to %s)", datasetClockLabel(s.CorrectedStart.String), datasetClockLabel(s.CorrectedEnd.String))
 		}
 		fmt.Println()
 		if s.CorrectedMissing {
@@ -43,6 +44,14 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Status: OK")
 		}
 	},
+}
+
+func datasetClockLabel(value string) string {
+	t, err := utils.ParseDatasetTime(value)
+	if err != nil {
+		return value
+	}
+	return utils.FormatDatasetTime(t)
 }
 
 func init() {

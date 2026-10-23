@@ -11,15 +11,17 @@ type Metadata struct {
 }
 
 type Record struct {
-	Timestamp       time.Time
-	LevelM          float64
-	TempC           float64
-	SalPSU          *float64
-	EC              *float64
-	Zero            float64
-	ImportedValue   float64
-	ImportedUnit    string
-	MeasurementKind string
+	Timestamp          time.Time
+	TimezonePresent    bool
+	LevelM             float64
+	TempC              float64
+	TemperatureMissing bool
+	SalPSU             *float64
+	EC                 *float64
+	Zero               float64
+	ImportedValue      float64
+	ImportedUnit       string
+	MeasurementKind    string
 }
 
 type ParsedFile struct {

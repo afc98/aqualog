@@ -27,25 +27,21 @@ func Add(p AddParams) (Project, error) {
 	}
 
 	// Insert project
-	result, err := database.Exec(`
+	var id int
+	err = database.QueryRow(`
 	INSERT INTO projects (name, description)
-	VALUES (?, ?)
+	VALUES ($1, $2)
+	RETURNING id
 	`,
 		p.Name,
 		p.Description,
-	)
+	).Scan(&id)
 	if err != nil {
 		return Project{}, fmt.Errorf("error adding project: %w", err)
 	}
 
-	// Get id of new project
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Project{}, fmt.Errorf("error getting last insert ID: %w", err)
-	}
-
 	return Project{
-		ID:          int(id),
+		ID:          id,
 		Name:        p.Name,
 		Description: p.Description,
 		CreatedAt:   time.Now(),
@@ -89,15 +85,14 @@ func Update(id int, name string, description string) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	if name != "" {
-		if _, err := database.Exec(`UPDATE projects SET name = ? WHERE id = ?`, name, id); err != nil {
+		if _, err := database.Exec(`UPDATE projects SET name = $1 WHERE id = $2`, name, id); err != nil {
 			return err
 		}
 	}
 	if description != "" {
-		if _, err := database.Exec(`UPDATE projects SET description = ? WHERE id = ?`, description, id); err != nil {
+		if _, err := database.Exec(`UPDATE projects SET description = $1 WHERE id = $2`, description, id); err != nil {
 			return err
 		}
 	}
@@ -109,7 +104,6 @@ func Remove(id int) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
-	_, err = database.Exec(`DELETE FROM projects WHERE id = ?`, id)
+	_, err = database.Exec(`DELETE FROM projects WHERE id = $1`, id)
 	return err
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/afc98/aqualog/core/db"
 	"github.com/afc98/aqualog/core/qa"
+	"github.com/afc98/aqualog/core/utils"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -50,8 +51,8 @@ var gapsCmd = &cobra.Command{
 			fmt.Printf("Logger %s (ID %d): %s to %s (%s)\n",
 				gap.LoggerName,
 				gap.LoggerID,
-				gap.Start.Format(time.RFC3339),
-				gap.End.Format(time.RFC3339),
+				utils.FormatDatasetTime(gap.Start),
+				utils.FormatDatasetTime(gap.End),
 				gap.Duration,
 			)
 		}

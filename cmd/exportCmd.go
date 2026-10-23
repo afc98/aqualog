@@ -22,12 +22,14 @@ var exportCmd = &cobra.Command{
 		from, _ := cmd.Flags().GetString("from")
 		to, _ := cmd.Flags().GetString("to")
 		format, _ := cmd.Flags().GetString("format")
+		series, _ := cmd.Flags().GetStringArray("series")
 
 		fmt.Println("Exporting data...")
 		err = export.ExportDataWithOptions(siteID, fileName, export.Options{
 			From:   from,
 			To:     to,
 			Format: format,
+			Series: series,
 		})
 		if err != nil {
 			fmt.Printf("Failed to export logger data for site %d: %v\n", siteID, err)
@@ -45,6 +47,7 @@ func init() {
 	exportCmd.Flags().String("from", "", "Start timestamp filter in RFC3339 format")
 	exportCmd.Flags().String("to", "", "End timestamp filter in RFC3339 format")
 	exportCmd.Flags().String("format", "csv", "Output format: csv or json")
+	exportCmd.Flags().StringArray("series", nil, "Measurement series to include (repeatable): level, temp, salinity, ec; defaults to level, salinity, and ec")
 
 	exportCmd.MarkFlagRequired("site")
 	exportCmd.MarkFlagRequired("file")

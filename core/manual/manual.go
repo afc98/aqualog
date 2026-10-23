@@ -1,8 +1,10 @@
 package manual
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/utils"
 	"time"
 )
 
@@ -19,6 +21,14 @@ type ManualReading struct {
 	WaterLevel float64
 	Timestamp  time.Time
 	Notes      string
+}
+
+func (row ManualReading) MarshalJSON() ([]byte, error) {
+	type alias ManualReading
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
 }
 
 type UpdateParams struct {
@@ -42,30 +52,25 @@ func Add(p AddParams) (ManualReading, error) {
 	if err != nil {
 		return ManualReading{}, fmt.Errorf("Database error: %w", err)
 	}
-	defer database.Close()
 
 	// Insert manual reading
-	result, err := database.Exec(`
+	var id int
+	err = database.QueryRow(`
 	INSERT INTO manual_readings (site_id, timestamp, value, notes)
-	VALUES (?, ?, ?, ?)
+	VALUES ($1, $2, $3, $4)
+	RETURNING id
 	`,
 		p.SiteID,
 		parsedTime,
 		p.WaterLevel,
 		p.Notes,
-	)
+	).Scan(&id)
 	if err != nil {
 		return ManualReading{}, fmt.Errorf("error adding manual reading: %w", err)
 	}
 
-	// Get id of new manual reading
-	id, err := result.LastInsertId()
-	if err != nil {
-		return ManualReading{}, err
-	}
-
 	return ManualReading{
-		ID:        int(id),
+		ID:        id,
 		SiteID:    p.SiteID,
 		Timestamp: parsedTime,
 		Notes:     p.Notes,
@@ -82,12 +87,11 @@ func List(siteID int) ([]ManualReading, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	// Query projects
 	rows, err := database.Query(`
 	SELECT id, site_id, timestamp, value, notes 
-	FROM manual_readings WHERE site_id=?
+	FROM manual_readings WHERE site_id=$1
 	ORDER BY id
 	`, siteID)
 	if err != nil {
@@ -119,11 +123,10 @@ func Delete(id int) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	result, err := database.Exec(`
 		DELETE FROM manual_readings
-		WHERE id = ?
+		WHERE id = $1
 	`, id)
 
 	if err != nil {
@@ -143,14 +146,13 @@ func Get(id int) (ManualReading, error) {
 	if err != nil {
 		return ManualReading{}, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	var m ManualReading
 
 	err = database.QueryRow(`
 		SELECT id, site_id, timestamp, value, notes
 		FROM manual_readings
-		WHERE id = ?
+		WHERE id = $1
 	`, id).Scan(
 		&m.ID,
 		&m.SiteID,
@@ -200,12 +202,11 @@ func Update(id int, updated ManualReading) error {
 	if err != nil {
 		return fmt.Errorf("Database error: %w", err)
 	}
-	defer database.Close()
 
 	result, err := database.Exec(`
 		UPDATE manual_readings
-		SET timestamp = ?, value = ?, notes = ?
-		WHERE id = ?
+		SET timestamp = $1, value = $2, notes = $3
+		WHERE id = $4
 	;`,
 		updated.Timestamp,
 		updated.WaterLevel,

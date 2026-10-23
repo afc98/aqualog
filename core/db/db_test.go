@@ -113,6 +113,48 @@ func TestResolvePathDefaultHomeError(t *testing.T) {
 	}
 }
 
+func TestResolveConfigPostgresFlag(t *testing.T) {
+	cfg, err := resolveConfig("", "postgres://user:secret@db.example/aqualog?sslmode=require", mapEnv(nil), "linux", testHome("/home/test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Backend != BackendPostgres || cfg.Source != PathSourceFlag {
+		t.Fatalf("config = %+v", cfg)
+	}
+	if got := RedactedLocation(cfg); got != "postgres://db.example/aqualog?sslmode=require" {
+		t.Fatalf("redacted location = %q", got)
+	}
+}
+
+func TestResolveConfigRejectsConflictingFlags(t *testing.T) {
+	_, err := resolveConfig("aqualog.db", "postgres://db.example/aqualog", mapEnv(nil), "linux", testHome("/home/test"))
+	if err == nil {
+		t.Fatal("expected conflicting database flags to fail")
+	}
+}
+
+func TestResolveConfigExplicitFlagOverridesOtherBackendEnv(t *testing.T) {
+	cfg, err := resolveConfig("local.db", "", mapEnv(map[string]string{
+		"AQUALOG_DATABASE_URL": "postgres://db.example/aqualog",
+	}), "linux", testHome("/home/test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Backend != BackendSQLite || cfg.SQLitePath != filepath.Clean("local.db") {
+		t.Fatalf("config = %+v", cfg)
+	}
+}
+
+func TestResolveConfigRejectsConflictingEnvironment(t *testing.T) {
+	_, err := resolveConfig("", "", mapEnv(map[string]string{
+		"AQUALOG_DB":           "local.db",
+		"AQUALOG_DATABASE_URL": "postgres://db.example/aqualog",
+	}), "linux", testHome("/home/test"))
+	if err == nil {
+		t.Fatal("expected conflicting database environment variables to fail")
+	}
+}
+
 func TestSchemaCreatesFileRemovalIndexes(t *testing.T) {
 	SetPathOverride(filepath.Join(t.TempDir(), "aqualog.db"))
 	t.Cleanup(func() { SetPathOverride("") })

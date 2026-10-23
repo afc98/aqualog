@@ -3,6 +3,7 @@ package plot
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/afc98/aqualog/core/utils"
 	"html"
 	"image/color"
 	"math"
@@ -158,7 +159,7 @@ func htmlDocument(seriesList []SeriesData, opts Options) string {
 		hs := htmlSeries{Name: s.Name, Unit: s.Unit, Color: colorHex(paletteColor(i))}
 		for j := range s.X {
 			hs.Points = append(hs.Points, point{
-				T: s.X[j].Format(time.RFC3339),
+				T: utils.FormatDatasetTime(s.X[j]),
 				X: s.X[j].Unix(),
 				Y: s.Y[j],
 			})

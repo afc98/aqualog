@@ -1,8 +1,10 @@
 package event
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/afc98/aqualog/core/db"
+	"github.com/afc98/aqualog/core/utils"
 	"strings"
 	"time"
 )
@@ -20,6 +22,14 @@ type Event struct {
 	Timestamp time.Time
 	EventType string
 	Notes     string
+}
+
+func (row Event) MarshalJSON() ([]byte, error) {
+	type alias Event
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
 }
 
 type UpdateParams struct {
@@ -58,30 +68,25 @@ func Add(p AddParams) (Event, error) {
 	if err != nil {
 		return Event{}, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	// Insert event
-	result, err := database.Exec(`
+	var id int
+	err = database.QueryRow(`
 		INSERT INTO logger_events (logger_id, timestamp, event_type, notes)
-		VALUES (?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id
 	`,
 		p.LoggerID,
 		parsedTime,
 		eventType,
 		p.Notes,
-	)
+	).Scan(&id)
 	if err != nil {
 		return Event{}, fmt.Errorf("error adding event: %w", err)
 	}
 
-	// Get id of new event
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Event{}, err
-	}
-
 	return Event{
-		ID:        int(id),
+		ID:        id,
 		LoggerID:  p.LoggerID,
 		Timestamp: parsedTime,
 		EventType: eventType,
@@ -108,11 +113,11 @@ func List(siteID, loggerID int) ([]Event, error) {
 	params := []any{}
 
 	if siteID != 0 {
-		query += " AND l.site_id = ?"
+		query += fmt.Sprintf(" AND l.site_id = $%d", len(params)+1)
 		params = append(params, siteID)
 	}
 	if loggerID != 0 {
-		query += " AND l.id = ?"
+		query += fmt.Sprintf(" AND l.id = $%d", len(params)+1)
 		params = append(params, loggerID)
 	}
 
@@ -122,7 +127,6 @@ func List(siteID, loggerID int) ([]Event, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	rows, err := database.Query(query, params...)
 	if err != nil {
@@ -154,11 +158,10 @@ func Delete(id int) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	result, err := database.Exec(`
 		DELETE FROM logger_events
-		WHERE id = ?
+		WHERE id = $1
 	`, id)
 
 	if err != nil {
@@ -178,14 +181,13 @@ func Get(id int) (Event, error) {
 	if err != nil {
 		return Event{}, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	var e Event
 
 	err = database.QueryRow(`
 		SELECT id, logger_id, timestamp, event_type, notes
 		FROM logger_events
-		WHERE id = ?
+		WHERE id = $1
 	`, id).Scan(
 		&e.ID,
 		&e.LoggerID,
@@ -245,12 +247,11 @@ func Update(id int, updated Event) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	result, err := database.Exec(`
 		UPDATE logger_events
-		SET timestamp = ?, event_type = ?, notes = ?
-		WHERE id = ?
+		SET timestamp = $1, event_type = $2, notes = $3
+		WHERE id = $4
 	`,
 		updated.Timestamp,
 		updated.EventType,

@@ -6,6 +6,7 @@ import (
 	"github.com/afc98/aqualog/core/baro"
 	"github.com/afc98/aqualog/core/db"
 	"github.com/afc98/aqualog/core/importer"
+	"io"
 	"path/filepath"
 	"time"
 
@@ -27,6 +28,7 @@ var baroImportCmd = &cobra.Command{
 		loggerIdent, _ := cmd.Flags().GetString("logger")
 		replaceExisting, _ := cmd.Flags().GetBool("replace")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -45,6 +47,7 @@ var baroImportCmd = &cobra.Command{
 			ReplaceExisting: replaceExisting,
 			Role:            "barometric",
 			DateOrder:       dateOrder,
+			TargetTimezone:  targetTimezone,
 		}
 		meta, recs, err := importer.ParseLoggerFileWithOptions(fileType, filePath, options)
 		if err != nil {
@@ -67,6 +70,9 @@ var baroImportCmd = &cobra.Command{
 			fmt.Println("Import failed:", err)
 			return
 		}
+		if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+			fmt.Println(warning)
+		}
 		fmt.Printf("Imported %d barometric records (%d skipped, %d replaced). Logger ID: %d\n", result.Inserted, result.Skipped, result.Replaced, result.LoggerID)
 	},
 }
@@ -82,6 +88,7 @@ var baroImportDirCmd = &cobra.Command{
 		loggerIdent, _ := cmd.Flags().GetString("logger")
 		replaceExisting, _ := cmd.Flags().GetBool("replace")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -110,6 +117,7 @@ var baroImportDirCmd = &cobra.Command{
 			ReplaceExisting: replaceExisting,
 			Role:            "barometric",
 			DateOrder:       dateOrder,
+			TargetTimezone:  targetTimezone,
 		}
 		totalInserted, totalSkipped, totalReplaced, failed := 0, 0, 0, 0
 		for _, filePath := range matches {
@@ -140,6 +148,9 @@ var baroImportDirCmd = &cobra.Command{
 			totalInserted += result.Inserted
 			totalSkipped += result.Skipped
 			totalReplaced += result.Replaced
+			if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+				fmt.Printf("%s: %s\n", filePath, warning)
+			}
 			fmt.Printf("OK %s: inserted=%d skipped=%d replaced=%d logger=%d\n", filePath, result.Inserted, result.Skipped, result.Replaced, result.LoggerID)
 		}
 		fmt.Printf("Summary: files=%d failed=%d inserted=%d skipped=%d replaced=%d\n", len(matches), failed, totalInserted, totalSkipped, totalReplaced)
@@ -212,38 +223,64 @@ var baroCorrectBatchCmd = &cobra.Command{
 			fmt.Println("Project not found:", err)
 			return
 		}
-		conn, err := db.GetDB()
-		if err != nil {
-			fmt.Println("Database error:", err)
+		opts, ok := baroOptionsFromFlags(cmd)
+		if !ok {
 			return
 		}
-		defer conn.Close()
-		rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = ? ORDER BY id`, projectID)
-		if err != nil {
-			fmt.Println("Failed to list sites:", err)
-			return
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var siteID int
-			var name string
-			if err := rows.Scan(&siteID, &name); err != nil {
-				fmt.Println("Failed to read site:", err)
-				continue
-			}
-			opts, ok := baroOptionsFromFlags(cmd)
-			if !ok {
-				return
-			}
-			opts.SiteID = siteID
-			result, err := baro.Correct(opts)
-			if err != nil {
-				fmt.Printf("%s: failed: %v\n", name, err)
-				continue
-			}
-			fmt.Printf("%s: run=%d updated=%d skipped=%d\n", name, result.RunID, result.Updated, result.Skipped)
+		if err := runBaroCorrectBatch(projectID, opts, cmd.OutOrStdout()); err != nil {
+			fmt.Fprintln(cmd.OutOrStdout(), "Failed to list sites:", err)
 		}
 	},
+}
+
+type batchSite struct {
+	id   int
+	name string
+}
+
+func runBaroCorrectBatch(projectID int, opts baro.CorrectOptions, out io.Writer) error {
+	sites, err := loadBatchSites(projectID)
+	if err != nil {
+		return err
+	}
+
+	for _, site := range sites {
+		siteOpts := opts
+		siteOpts.SiteID = site.id
+		result, err := baro.Correct(siteOpts)
+		if err != nil {
+			fmt.Fprintf(out, "%s: failed: %v\n", site.name, err)
+			continue
+		}
+		fmt.Fprintf(out, "%s: run=%d updated=%d skipped=%d\n", site.name, result.RunID, result.Updated, result.Skipped)
+	}
+	return nil
+}
+
+func loadBatchSites(projectID int) ([]batchSite, error) {
+	conn, err := db.GetDB()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := conn.Query(`SELECT id, name FROM sites WHERE project_id = $1 ORDER BY id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sites []batchSite
+	for rows.Next() {
+		var site batchSite
+		if err := rows.Scan(&site.id, &site.name); err != nil {
+			return nil, err
+		}
+		sites = append(sites, site)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return sites, nil
 }
 
 var baroStatusCmd = &cobra.Command{
@@ -284,6 +321,7 @@ func init() {
 	baroImportCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	baroImportCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	baroImportCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
+	baroImportCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	baroImportCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	baroImportCmd.Flags().Bool("replace", false, "Replace existing records for matching timestamps")
 	baroImportCmd.MarkFlagRequired("file")
@@ -294,6 +332,7 @@ func init() {
 	baroImportDirCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	baroImportDirCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	baroImportDirCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
+	baroImportDirCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	baroImportDirCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	baroImportDirCmd.Flags().String("pattern", "*", "File glob pattern within the directory")
 	baroImportDirCmd.Flags().Bool("replace", false, "Replace existing records for matching timestamps")

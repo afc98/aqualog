@@ -29,24 +29,18 @@ func Add(p AddParams) (Site, error) {
 	if err != nil {
 		return Site{}, fmt.Errorf("Database error: %w", err)
 	}
-	defer database.Close()
 
-	result, err := database.Exec(
-		`INSERT INTO sites (project_id, name, latitude, longitude) VALUES (?, ?, ?, ?)`,
+	var id int
+	err = database.QueryRow(
+		`INSERT INTO sites (project_id, name, latitude, longitude) VALUES ($1, $2, $3, $4) RETURNING id`,
 		p.ProjectID, p.Name, p.Latitude, p.Longitude,
-	)
+	).Scan(&id)
 	if err != nil {
 		return Site{}, fmt.Errorf("failed to add site: %w", err)
 	}
 
-	// Get the ID of the newly added site
-	id, err := result.LastInsertId()
-	if err != nil {
-		return Site{}, fmt.Errorf("failed to get site ID: %w", err)
-	}
-
 	return Site{
-		ID:        int(id),
+		ID:        id,
 		ProjectID: p.ProjectID,
 		Name:      p.Name,
 		Latitude:  p.Latitude,
@@ -61,10 +55,9 @@ func List(ProjectID int) ([]Site, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 
 	// Query sites
-	rows, err := database.Query(`SELECT id, name, latitude, longitude FROM sites WHERE project_id = ? ORDER BY id`, ProjectID)
+	rows, err := database.Query(`SELECT id, name, latitude, longitude FROM sites WHERE project_id = $1 ORDER BY id`, ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query sites: %w", err)
 	}
@@ -92,24 +85,23 @@ func Update(id int, name string, latitude *float64, longitude *float64, descript
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
 	if name != "" {
-		if _, err := database.Exec(`UPDATE sites SET name = ? WHERE id = ?`, name, id); err != nil {
+		if _, err := database.Exec(`UPDATE sites SET name = $1 WHERE id = $2`, name, id); err != nil {
 			return err
 		}
 	}
 	if latitude != nil {
-		if _, err := database.Exec(`UPDATE sites SET latitude = ? WHERE id = ?`, *latitude, id); err != nil {
+		if _, err := database.Exec(`UPDATE sites SET latitude = $1 WHERE id = $2`, *latitude, id); err != nil {
 			return err
 		}
 	}
 	if longitude != nil {
-		if _, err := database.Exec(`UPDATE sites SET longitude = ? WHERE id = ?`, *longitude, id); err != nil {
+		if _, err := database.Exec(`UPDATE sites SET longitude = $1 WHERE id = $2`, *longitude, id); err != nil {
 			return err
 		}
 	}
 	if description != "" {
-		if _, err := database.Exec(`UPDATE sites SET description = ? WHERE id = ?`, description, id); err != nil {
+		if _, err := database.Exec(`UPDATE sites SET description = $1 WHERE id = $2`, description, id); err != nil {
 			return err
 		}
 	}
@@ -121,7 +113,6 @@ func Remove(id int) error {
 	if err != nil {
 		return fmt.Errorf("database error: %w", err)
 	}
-	defer database.Close()
-	_, err = database.Exec(`DELETE FROM sites WHERE id = ?`, id)
+	_, err = database.Exec(`DELETE FROM sites WHERE id = $1`, id)
 	return err
 }

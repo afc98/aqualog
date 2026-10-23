@@ -41,7 +41,7 @@ and place the `aqualog` executable somewhere on your `PATH`.
 Aqualog uses [`go-sqlite3`](https://github.com/mattn/go-sqlite3), which embeds
 SQLite through CGO. Building from source requires:
 
-- Go 1.25.1 or newer.
+- Go 1.26.10 or newer.
 - `CGO_ENABLED=1` (the default when a suitable C compiler is available).
 - A C compiler on `PATH`: GCC/build tools on Linux, Xcode Command Line Tools on
   macOS, or a 64-bit MinGW GCC toolchain on Windows.
@@ -117,7 +117,7 @@ The database is automatically initialised on first run in your user data directo
 ./aqualog doctor
 ```
 
-### Choose a Database
+### Choose a Database Backend
 
 By default, Aqualog uses one database in your OS user data directory:
 
@@ -139,6 +139,53 @@ AQUALOG_DB="path/to/project-a.db" ./aqualog info
 ```
 
 If both are set, `--db` takes precedence over `AQUALOG_DB`.
+
+For a shared PostgreSQL 14 or newer database, use a standard connection URL:
+
+```bash
+./aqualog --database-url "postgres://user:password@db.example/aqualog?sslmode=require" doctor
+AQUALOG_DATABASE_URL="postgres://user:password@db.example/aqualog?sslmode=require" ./aqualog project list
+```
+
+Do not set both SQLite and PostgreSQL options at the same level. An explicit
+`--db` or `--database-url` flag takes precedence over database environment
+variables. `info` and `doctor` redact PostgreSQL credentials in their output.
+
+To copy a current Aqualog SQLite database into an initialized, empty PostgreSQL
+database:
+
+```bash
+./aqualog --database-url "postgres://user:password@db.example/aqualog?sslmode=require" \
+  migrate sqlite-to-postgres --source "path/to/aqualog.db"
+```
+
+The copy is transactional, preserves IDs, validates row counts and
+relationships, and refuses to merge into a destination containing Aqualog
+data.
+
+To append another SQLite database to the same PostgreSQL database, with
+`AQUALOG_DATABASE_URL` configured:
+
+```powershell
+.\aqualog.exe migrate sqlite-to-postgres --source "path/to/second-project.db" --append
+```
+
+Append mode copies every project and related record, assigns new IDs, and
+remaps all relationships. Existing records are preserved. After committing,
+the command reports imported row counts and old-to-new project IDs. Stored
+file paths are preserved; files on disk are not copied.
+
+The whole append is rejected if a project name already exists in the destination
+or occurs more than once in the source. Matching is exact and case-sensitive;
+there is no automatic renaming, merging, or overwriting. This also rejects repeat
+imports under the same project names, but is not persistent import tracking:
+renaming projects can allow a later duplicate import. Site and logger names may
+repeat across projects; use numeric IDs in commands when names are ambiguous.
+
+Append runs in one transaction and temporarily blocks writes to the destination
+tables while allowing ordinary reads. A failed append leaves no imported rows;
+identity sequences may have gaps. Without `--append`, migration still requires
+an empty destination and preserves source IDs.
 
 ### Create and Review a Project
 
@@ -203,6 +250,17 @@ Remove commands are destructive and require `--confirm`:
 ./aqualog manual remove --id 1
 ```
 
+When a logger is reinstalled without a new field measurement, an estimated
+reading can be carried forward from its previous deployment:
+
+```bash
+./aqualog manual carry-forward --site "Site 1" --logger "Logger 1" --time "2026-10-23T09:00:00" --max-lookback 1h
+```
+
+This uses the previous deployment's last corrected level, assumes no water-level
+change during the gap, and labels the new reading as an estimate. The site is
+reprocessed atomically by default; use `--reprocess=false` to only save the reading.
+
 ### Import Logger Data
 
 Supported import types are `aquaread`, `solinst`, and `insitu`.
@@ -228,6 +286,23 @@ Import all matching files in a directory:
 ```bash
 ./aqualog import-dir --type aquaread --site "Site 1" --logger "Logger 1" --dir "path/to/files" --pattern "*.tab"
 ```
+
+### Dataset Clock Times
+
+Dataset timestamps represent clock times without a timezone. By default, imports
+keep the clock fields from the file and discard any timezone offset, reporting a
+warning. To convert timestamps that contain timezone information before storing
+their clock fields, specify an IANA timezone:
+
+```bash
+./aqualog import --type insitu --site "Site 1" --logger "Logger 1" --file "path/to/file.csv" --target-timezone Europe/London
+```
+
+Timestamps without timezone information are left unchanged. The same option is
+available for directory and barometric imports. JSON and export timestamps omit
+timezone suffixes; consumers should interpret them using the dataset's clock convention.
+Existing PostgreSQL dataset timestamp columns migrate automatically on opening
+the database, preserving their UTC clock fields. Back up the database before upgrading.
 
 ### Manage Imported Files
 
@@ -337,7 +412,14 @@ Choose output format:
 
 ### Plot Site Data
 
-Supported series include level, EC, salinity, and temperature. By default, plots use processed corrected data. Use `--type raw` for uncorrected logger values, `--type baro` for barometrically corrected values, or `--type uncompensated` for absolute-pressure/uncompensated logger records.
+Supported series include level, EC, salinity, temperature, and atmospheric pressure. By default, plots use processed corrected data. Use `--type raw` for uncorrected logger values, `--type baro` for barometrically corrected water level, or `--type uncompensated` for absolute-pressure/uncompensated logger records.
+
+Plot atmospheric pressure in kPa. Aqualog uses the site's barologger assignment or latest correction run by default; use `--barologger` to override it:
+
+```bash
+./aqualog plot --site "Site 1" --type pressure --series pressure
+./aqualog plot --site "Site 1" --type pressure --series pressure --barologger "Barologger 1"
+```
 
 ```bash
 ./aqualog plot --site "Site 1" --series level
@@ -360,28 +442,39 @@ Export filtered JSON:
 ./aqualog export --site "Site 1" --file "output.json" --format json --from "2025-01-01T00:00:00Z" --to "2025-03-01T00:00:00Z"
 ```
 
+Select measurement groups explicitly by repeating `--series`. Timestamp and site/logger metadata are always included; `level` includes raw, manual, and corrected level columns:
+
+```bash
+./aqualog export --site "Site 1" --file "levels.csv" --series level --series temp
+./aqualog export --site "Site 1" --file "chemistry.csv" --series salinity --series ec
+```
+
+Optional salinity and conductivity measurements remain in the export schema. Missing measurements are written as blank CSV cells or JSON `null`; genuine measured zeroes remain numeric zeroes.
+
 ## Command Summary
 
-| Command | Purpose |
-| --- | --- |
-| `project add/list/update/remove` | Manage projects |
-| `site add/list/update/remove` | Manage sites |
-| `logger add/list/update/remove` | Manage loggers |
-| `event add/list/update/remove` | Manage logger events |
-| `manual add/list/update/remove` | Manage manual water-level readings |
-| `import` | Import one logger file |
-| `import-dir` | Import multiple logger files from a directory |
-| `files list/remove` | Review or remove imported files |
-| `baro import/import-dir/assign/correct/correct-batch/status` | Manage barometric correction |
-| `status` | Summarise site data and processing state |
-| `validate` | Report processing readiness issues |
-| `gaps` | Find timestamp gaps in raw logger data |
-| `process` | Generate corrected data |
-| `query` | Query raw or corrected data |
-| `plot` | Plot site data |
-| `export` | Export processed data |
-| `info` | Show database path and supported import types |
-| `doctor` | Check database and runtime health |
+| Command                                                        | Purpose                                                                |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `project add/list/update/remove`                             | Manage projects                                                        |
+| `site add/list/update/remove`                                | Manage sites                                                           |
+| `logger add/list/update/remove`                              | Manage loggers                                                         |
+| `event add/list/update/remove`                               | Manage logger events                                                   |
+| `manual add/list/update/remove`                              | Manage manual water-level readings                                     |
+| `manual carry-forward`                                      | Estimate a reading from the previous deployment                        |
+| `import`                                                     | Import one logger file                                                 |
+| `import-dir`                                                 | Import multiple logger files from a directory                          |
+| `files list/remove`                                          | Review or remove imported files                                        |
+| `baro import/import-dir/assign/correct/correct-batch/status` | Manage barometric correction                                           |
+| `status`                                                     | Summarise site data and processing state                               |
+| `validate`                                                   | Report processing readiness issues                                     |
+| `gaps`                                                       | Find timestamp gaps in raw logger data                                 |
+| `process`                                                    | Generate corrected data                                                |
+| `query`                                                      | Query raw or corrected data                                            |
+| `plot`                                                       | Plot site data                                                         |
+| `export`                                                     | Export processed data                                                  |
+| `migrate sqlite-to-postgres`                                 | Copy SQLite into empty PostgreSQL, or append projects with `--append` |
+| `info`                                                       | Show database backend, location, and supported import types            |
+| `doctor`                                                     | Check database and runtime health                                      |
 
 ## License
 

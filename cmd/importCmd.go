@@ -20,6 +20,7 @@ var loggerImportCmd = &cobra.Command{
 		role, _ := cmd.Flags().GetString("role")
 		measurementKind, _ := cmd.Flags().GetString("measurement-kind")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 		siteIdent, _ := cmd.Flags().GetString("site")
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -37,6 +38,7 @@ var loggerImportCmd = &cobra.Command{
 			Role:            role,
 			MeasurementKind: measurementKind,
 			DateOrder:       dateOrder,
+			TargetTimezone:  targetTimezone,
 		}
 		meta, recs, err := importer.ParseLoggerFileWithOptions(fileType, filePath, options)
 		if err != nil {
@@ -54,6 +56,9 @@ var loggerImportCmd = &cobra.Command{
 			return
 		}
 
+		if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+			fmt.Println(warning)
+		}
 		fmt.Printf(
 			"Imported %d records (%d skipped, %d replaced). Logger ID: %d\n",
 			result.Inserted,
@@ -71,6 +76,7 @@ func init() {
 	loggerImportCmd.Flags().StringP("logger", "l", "", "Logger ID")
 	loggerImportCmd.Flags().String("role", "", "Logger role (water_level or barometric); inferred when omitted")
 	loggerImportCmd.Flags().String("measurement-kind", "", "Override parsed measurement kind")
+	loggerImportCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	loggerImportCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	loggerImportCmd.Flags().Bool("replace", false, "Replace existing records for matching logger timestamps")
 

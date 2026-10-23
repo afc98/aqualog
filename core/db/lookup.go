@@ -17,10 +17,9 @@ func GetProjectIDByName(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer d.Close()
 
 	var id int
-	err = d.QueryRow("SELECT id FROM projects WHERE name = ? LIMIT 1", name).Scan(&id)
+	err = d.QueryRow("SELECT id FROM projects WHERE name = $1 LIMIT 1", name).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("no project named %q", name)
 	}
@@ -42,10 +41,9 @@ func GetSiteIDByName(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer d.Close()
 
 	var id int
-	err = d.QueryRow("SELECT id FROM sites WHERE name = ? LIMIT 1", name).Scan(&id)
+	err = d.QueryRow("SELECT id FROM sites WHERE name = $1 LIMIT 1", name).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("no site named %q", name)
 	}
@@ -67,10 +65,9 @@ func GetLoggerIDByName(name string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer d.Close()
 
 	var id int
-	err = d.QueryRow("SELECT id FROM loggers WHERE name = ? LIMIT 1", name).Scan(&id)
+	err = d.QueryRow("SELECT id FROM loggers WHERE name = $1 LIMIT 1", name).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("no logger named %q", name)
 	}
@@ -93,7 +90,7 @@ func GetSiteByID(db *sql.DB, siteID int) (*Site, error) {
 	err := db.QueryRow(`
 		SELECT id, name
 		FROM sites
-		WHERE id = ?
+		WHERE id = $1
 	`, siteID).Scan(&s.ID, &s.Name)
 
 	if err != nil {

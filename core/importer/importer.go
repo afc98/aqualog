@@ -9,6 +9,7 @@ import (
 	"github.com/afc98/aqualog/core/utils"
 	"os"
 	"time"
+	_ "time/tzdata"
 )
 
 var ErrFileAlreadyRecorded = errors.New("file already recorded for logger")
@@ -19,6 +20,7 @@ type ImportResult struct {
 	Skipped       int
 	Replaced      int
 	LoggerCreated bool
+	Warning       string
 }
 
 type ImportOptions struct {
@@ -26,6 +28,7 @@ type ImportOptions struct {
 	Role            string
 	MeasurementKind string
 	DateOrder       string
+	TargetTimezone  string
 }
 
 type File struct {
@@ -39,6 +42,14 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 }
 
 func ParseLoggerFileWithOptions(fileType, filePath string, options ImportOptions) (parsers.Metadata, []parsers.Record, error) {
+	var target *time.Location
+	if options.TargetTimezone != "" {
+		var err error
+		target, err = time.LoadLocation(options.TargetTimezone)
+		if err != nil {
+			return parsers.Metadata{}, nil, fmt.Errorf("invalid target timezone %q: %w", options.TargetTimezone, err)
+		}
+	}
 	if _, err := os.Stat(filePath); err != nil {
 		return parsers.Metadata{}, nil, err
 	}
@@ -49,25 +60,55 @@ func ParseLoggerFileWithOptions(fileType, filePath string, options ImportOptions
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	case "solinst":
 		data, err := parsers.ParseSolinstWithOptions(filePath, parsers.SolinstOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	case "insitu":
 		data, err := parsers.ParseInsituWithOptions(filePath, parsers.DateOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	default:
 		return parsers.Metadata{}, nil, fmt.Errorf("unsupported file type")
 	}
+}
+
+// normalizeImportedTimes drops source offset by default, or first converts
+// to the explicitly requested target timezone. UTC is only a Go carrier for
+// a clock value; PostgreSQL and the UI store/display the wall fields.
+func normalizeImportedTimes(records []parsers.Record, target *time.Location) []parsers.Record {
+	for i := range records {
+		t := records[i].Timestamp
+		if records[i].TimezonePresent && target != nil {
+			t = t.In(target)
+		}
+		records[i].Timestamp = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+	}
+	return records
+}
+
+func TimezoneWarning(records []parsers.Record, targetTimezone string) string {
+	count := 0
+	for _, record := range records {
+		if record.TimezonePresent {
+			count++
+		}
+	}
+	if count == 0 {
+		return ""
+	}
+	if targetTimezone == "" {
+		return fmt.Sprintf("Warning: %d imported timestamps had timezone information; original clock times were kept and offsets discarded.", count)
+	}
+	return fmt.Sprintf("Warning: %d imported timestamps were converted to %s clock time; timezone information was then discarded.", count, targetTimezone)
 }
 
 func LoggerFileExists(loggerID int, filePath string) (bool, error) {
@@ -75,14 +116,13 @@ func LoggerFileExists(loggerID int, filePath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer dbConn.Close()
 
 	var exists bool
 	err = dbConn.QueryRow(
 		`SELECT EXISTS(
 			SELECT 1
 			FROM logger_files
-			WHERE logger_id = ? AND file = ?
+			WHERE logger_id = $1 AND file = $2
 		)`,
 		loggerID, filePath,
 	).Scan(&exists)
@@ -100,7 +140,7 @@ func loggerFileExistsTx(tx *sql.Tx, loggerID int, filePath string) (bool, error)
 		`SELECT EXISTS(
 			SELECT 1
 			FROM logger_files
-			WHERE logger_id = ? AND file = ?
+			WHERE logger_id = $1 AND file = $2
 		)`,
 		loggerID, filePath,
 	).Scan(&exists)
@@ -117,21 +157,18 @@ func insertLoggerFileTx(
 	measurementUnit string,
 ) (int, error) {
 
-	res, err := tx.Exec(
+	var id int
+	err := tx.QueryRow(
 		`INSERT INTO logger_files (logger_id, file, type, measurement_kind, measurement_unit)
-		 VALUES (?, ?, ?, ?, ?)`,
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id`,
 		loggerID, filePath, fileType, measurementKind, measurementUnit,
-	)
+	).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
-
-	return int(id), nil
+	return id, nil
 }
 
 func firstMeasurement(recs []parsers.Record) (string, string) {
@@ -169,7 +206,6 @@ func ImportRecords(
 	if err != nil {
 		return nil, err
 	}
-	defer dbConn.Close()
 
 	tx, err := dbConn.Begin()
 	if err != nil {
@@ -191,19 +227,18 @@ func ImportRecords(
 		err = tx.QueryRow(`
 			SELECT id
 			FROM loggers
-			WHERE serial_number = ? AND site_id = ?
+			WHERE serial_number = $1 AND site_id = $2
 		`, meta.SerialNumber, siteID).Scan(&loggerID)
 
 		if err == sql.ErrNoRows {
-			res, err := tx.Exec(`
+			err := tx.QueryRow(`
 				INSERT INTO loggers (site_id, name, serial_number, role)
-				VALUES (?, ?, ?, ?)
-			`, siteID, meta.SiteIdent, meta.SerialNumber, role)
+				VALUES ($1, $2, $3, $4)
+				RETURNING id
+			`, siteID, meta.SiteIdent, meta.SerialNumber, role).Scan(&loggerID)
 			if err != nil {
 				return nil, err
 			}
-			id, _ := res.LastInsertId()
-			loggerID = int(id)
 			result.LoggerCreated = true
 		} else if err != nil {
 			return nil, err
@@ -218,7 +253,7 @@ func ImportRecords(
 	if exists {
 		return nil, ErrFileAlreadyRecorded
 	}
-	if _, err := tx.Exec(`UPDATE loggers SET role = ? WHERE id = ?`, role, loggerID); err != nil {
+	if _, err := tx.Exec(`UPDATE loggers SET role = $1 WHERE id = $2`, role, loggerID); err != nil {
 		return nil, err
 	}
 
@@ -250,13 +285,8 @@ func ImportRecords(
 			end = len(recs)
 		}
 
-		insertVerb := "INSERT OR IGNORE"
-		if options.ReplaceExisting {
-			insertVerb = "INSERT"
-		}
-
 		query := fmt.Sprintf(`
-			%s INTO logger_data (
+			INSERT INTO logger_data (
 				logger_id,
 				logger_file_id,
 				timestamp,
@@ -268,7 +298,7 @@ func ImportRecords(
 				sal_psu,
 				ec_us
 			) VALUES
-		`, insertVerb)
+		`)
 
 		args := make([]any, 0, (end-i)*10)
 
@@ -281,7 +311,13 @@ func ImportRecords(
 			if isBarometricKind(recKind) || isAbsolutePressureKind(recKind) {
 				level = 0
 			}
-			query += "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?),"
+			var temperature any = rec.TempC
+			if rec.TemperatureMissing {
+				temperature = nil
+			}
+			base := len(args)
+			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d),",
+				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10)
 			args = append(args,
 				loggerID,
 				loggerFileID,
@@ -290,7 +326,7 @@ func ImportRecords(
 				rec.ImportedValue,
 				rec.ImportedUnit,
 				recKind,
-				rec.TempC,
+				temperature,
 				rec.SalPSU,
 				rec.EC,
 			)
@@ -316,6 +352,8 @@ func ImportRecords(
 					sal_psu = excluded.sal_psu,
 					ec_us = excluded.ec_us
 			`
+		} else {
+			query += ` ON CONFLICT(logger_id, timestamp) DO NOTHING`
 		}
 
 		res, err := tx.Exec(query, args...)
@@ -334,7 +372,7 @@ func ImportRecords(
 	}
 
 	if result.Replaced > 0 {
-		if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = ?`, siteID); err != nil {
+		if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = $1`, siteID); err != nil {
 			return nil, fmt.Errorf("failed to invalidate corrected data: %w", err)
 		}
 	}
@@ -355,14 +393,14 @@ func countExistingRecordsTx(tx *sql.Tx, loggerID int, recs []parsers.Record) (in
 	query := `
 		SELECT COUNT(*)
 		FROM logger_data
-		WHERE logger_id = ?
+		WHERE logger_id = $1
 		  AND timestamp IN (
 	`
 	args := make([]any, 0, len(recs)+1)
 	args = append(args, loggerID)
 
-	for _, rec := range recs {
-		query += "?,"
+	for i, rec := range recs {
+		query += fmt.Sprintf("$%d,", i+2)
 		args = append(args, rec.Timestamp)
 	}
 
