@@ -3,8 +3,6 @@
 All notable changes to this project are documented in this file.
 The format follows Keep a Changelog. Versions follow Semantic Versioning.
 
-## [Unreleased]
-
 ## [0.2.0] - 2026-10-23
 
 ### Added
@@ -99,6 +97,5 @@ The format follows Keep a Changelog. Versions follow Semantic Versioning.
   and configurable database paths.
 - Native release binaries for Linux, macOS, and Windows.
 
-[Unreleased]: https://github.com/afc98/aqualog/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/afc98/aqualog/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/afc98/aqualog/releases/tag/v0.1.0
