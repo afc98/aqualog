@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	_ "time/tzdata"
 )
 
 var ErrFileAlreadyRecorded = errors.New("file already recorded for logger")
@@ -19,6 +20,7 @@ type ImportResult struct {
 	Skipped       int
 	Replaced      int
 	LoggerCreated bool
+	Warning       string
 }
 
 type ImportOptions struct {
@@ -26,6 +28,7 @@ type ImportOptions struct {
 	Role            string
 	MeasurementKind string
 	DateOrder       string
+	TargetTimezone  string
 }
 
 type File struct {
@@ -39,6 +42,14 @@ func ParseLoggerFile(fileType, filePath string) (parsers.Metadata, []parsers.Rec
 }
 
 func ParseLoggerFileWithOptions(fileType, filePath string, options ImportOptions) (parsers.Metadata, []parsers.Record, error) {
+	var target *time.Location
+	if options.TargetTimezone != "" {
+		var err error
+		target, err = time.LoadLocation(options.TargetTimezone)
+		if err != nil {
+			return parsers.Metadata{}, nil, fmt.Errorf("invalid target timezone %q: %w", options.TargetTimezone, err)
+		}
+	}
 	if _, err := os.Stat(filePath); err != nil {
 		return parsers.Metadata{}, nil, err
 	}
@@ -49,25 +60,55 @@ func ParseLoggerFileWithOptions(fileType, filePath string, options ImportOptions
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	case "solinst":
 		data, err := parsers.ParseSolinstWithOptions(filePath, parsers.SolinstOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	case "insitu":
 		data, err := parsers.ParseInsituWithOptions(filePath, parsers.DateOptions{DateOrder: options.DateOrder})
 		if err != nil {
 			return parsers.Metadata{}, nil, err
 		}
-		return data.Metadata, data.Records, nil
+		return data.Metadata, normalizeImportedTimes(data.Records, target), nil
 
 	default:
 		return parsers.Metadata{}, nil, fmt.Errorf("unsupported file type")
 	}
+}
+
+// normalizeImportedTimes drops source offset by default, or first converts
+// to the explicitly requested target timezone. UTC is only a Go carrier for
+// a clock value; PostgreSQL and the UI store/display the wall fields.
+func normalizeImportedTimes(records []parsers.Record, target *time.Location) []parsers.Record {
+	for i := range records {
+		t := records[i].Timestamp
+		if records[i].TimezonePresent && target != nil {
+			t = t.In(target)
+		}
+		records[i].Timestamp = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), time.UTC)
+	}
+	return records
+}
+
+func TimezoneWarning(records []parsers.Record, targetTimezone string) string {
+	count := 0
+	for _, record := range records {
+		if record.TimezonePresent {
+			count++
+		}
+	}
+	if count == 0 {
+		return ""
+	}
+	if targetTimezone == "" {
+		return fmt.Sprintf("Warning: %d imported timestamps had timezone information; original clock times were kept and offsets discarded.", count)
+	}
+	return fmt.Sprintf("Warning: %d imported timestamps were converted to %s clock time; timezone information was then discarded.", count, targetTimezone)
 }
 
 func LoggerFileExists(loggerID int, filePath string) (bool, error) {
@@ -270,6 +311,10 @@ func ImportRecords(
 			if isBarometricKind(recKind) || isAbsolutePressureKind(recKind) {
 				level = 0
 			}
+			var temperature any = rec.TempC
+			if rec.TemperatureMissing {
+				temperature = nil
+			}
 			base := len(args)
 			query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d),",
 				base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10)
@@ -281,7 +326,7 @@ func ImportRecords(
 				rec.ImportedValue,
 				rec.ImportedUnit,
 				recKind,
-				rec.TempC,
+				temperature,
 				rec.SalPSU,
 				rec.EC,
 			)

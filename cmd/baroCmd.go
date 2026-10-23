@@ -28,6 +28,7 @@ var baroImportCmd = &cobra.Command{
 		loggerIdent, _ := cmd.Flags().GetString("logger")
 		replaceExisting, _ := cmd.Flags().GetBool("replace")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -46,6 +47,7 @@ var baroImportCmd = &cobra.Command{
 			ReplaceExisting: replaceExisting,
 			Role:            "barometric",
 			DateOrder:       dateOrder,
+			TargetTimezone:  targetTimezone,
 		}
 		meta, recs, err := importer.ParseLoggerFileWithOptions(fileType, filePath, options)
 		if err != nil {
@@ -68,6 +70,9 @@ var baroImportCmd = &cobra.Command{
 			fmt.Println("Import failed:", err)
 			return
 		}
+		if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+			fmt.Println(warning)
+		}
 		fmt.Printf("Imported %d barometric records (%d skipped, %d replaced). Logger ID: %d\n", result.Inserted, result.Skipped, result.Replaced, result.LoggerID)
 	},
 }
@@ -83,6 +88,7 @@ var baroImportDirCmd = &cobra.Command{
 		loggerIdent, _ := cmd.Flags().GetString("logger")
 		replaceExisting, _ := cmd.Flags().GetBool("replace")
 		dateOrder, _ := cmd.Flags().GetString("date-order")
+		targetTimezone, _ := cmd.Flags().GetString("target-timezone")
 
 		siteID, err := db.ResolveSiteIdentifier(siteIdent)
 		if err != nil {
@@ -111,6 +117,7 @@ var baroImportDirCmd = &cobra.Command{
 			ReplaceExisting: replaceExisting,
 			Role:            "barometric",
 			DateOrder:       dateOrder,
+			TargetTimezone:  targetTimezone,
 		}
 		totalInserted, totalSkipped, totalReplaced, failed := 0, 0, 0, 0
 		for _, filePath := range matches {
@@ -141,6 +148,9 @@ var baroImportDirCmd = &cobra.Command{
 			totalInserted += result.Inserted
 			totalSkipped += result.Skipped
 			totalReplaced += result.Replaced
+			if warning := importer.TimezoneWarning(recs, targetTimezone); warning != "" {
+				fmt.Printf("%s: %s\n", filePath, warning)
+			}
 			fmt.Printf("OK %s: inserted=%d skipped=%d replaced=%d logger=%d\n", filePath, result.Inserted, result.Skipped, result.Replaced, result.LoggerID)
 		}
 		fmt.Printf("Summary: files=%d failed=%d inserted=%d skipped=%d replaced=%d\n", len(matches), failed, totalInserted, totalSkipped, totalReplaced)
@@ -311,6 +321,7 @@ func init() {
 	baroImportCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	baroImportCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	baroImportCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
+	baroImportCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	baroImportCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	baroImportCmd.Flags().Bool("replace", false, "Replace existing records for matching timestamps")
 	baroImportCmd.MarkFlagRequired("file")
@@ -321,6 +332,7 @@ func init() {
 	baroImportDirCmd.Flags().StringP("type", "t", "", "File type (solinst, aquaread or insitu)")
 	baroImportDirCmd.Flags().StringP("site", "s", "", "Site ID or name")
 	baroImportDirCmd.Flags().StringP("logger", "l", "", "Logger ID or name")
+	baroImportDirCmd.Flags().String("target-timezone", "", "Convert timezone-bearing imported timestamps to this IANA timezone")
 	baroImportDirCmd.Flags().String("date-order", "auto", "Slash date order for imports: auto, dmy, or mdy")
 	baroImportDirCmd.Flags().String("pattern", "*", "File glob pattern within the directory")
 	baroImportDirCmd.Flags().Bool("replace", false, "Replace existing records for matching timestamps")

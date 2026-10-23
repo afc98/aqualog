@@ -9,6 +9,7 @@ import (
 
 	"aqualog/core/db"
 	aqlplot "aqualog/core/plot"
+	"aqualog/core/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -132,7 +133,7 @@ func parsePlotBound(value string, endOfDay bool) (time.Time, error) {
 		}
 		return time.Parse(time.RFC3339, plotDefaultStart)
 	}
-	if t, err := time.Parse(time.RFC3339, value); err == nil {
+	if t, err := utils.ParseDatasetTime(value); err == nil {
 		return t, nil
 	}
 	t, err := time.Parse("2006-01-02", value)
@@ -487,13 +488,13 @@ func scanNullablePlotRows(rows *sql.Rows, name, unit string) (aqlplot.SeriesData
 }
 
 func parseDBTime(value string) (time.Time, error) {
-	if t, err := time.Parse(time.RFC3339, value); err == nil {
+	if t, err := utils.ParseDatasetTime(value); err == nil {
 		return t, nil
 	}
 	if t, err := time.Parse("2006-01-02 15:04:05-07:00", value); err == nil {
 		return t, nil
 	}
-	return time.Parse("2006-01-02 15:04:05", value)
+	return utils.ParseDatasetTime(value)
 }
 
 func uncompensatedHead(value float64, kind string) (float64, bool) {

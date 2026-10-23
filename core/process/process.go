@@ -68,6 +68,14 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 		return err
 	}
 
+	corrected, err := computeSiteRows(raw, manual, events)
+	if err != nil {
+		return err
+	}
+	return StoreCorrectedRows(db, siteID, corrected)
+}
+
+func computeSiteRows(raw []LoggerRawRow, manual []ManualMeasurement, events []LoggerEvent) ([]CorrectedRow, error) {
 	rawByLogger := make(map[int][]LoggerRawRow)
 	for _, row := range raw {
 		rawByLogger[row.LoggerID] = append(rawByLogger[row.LoggerID], row)
@@ -88,12 +96,12 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 	for _, loggerID := range loggerIDs {
 		loggerRows, err := ComputeCorrectedRows(rawByLogger[loggerID], manual, eventsByLogger[loggerID])
 		if err != nil {
-			return fmt.Errorf("logger %d: %w", loggerID, err)
+			return nil, fmt.Errorf("logger %d: %w", loggerID, err)
 		}
 		for _, row := range loggerRows {
 			timestampKey := row.Timestamp.UnixNano()
 			if otherLoggerID, exists := timestampOwner[timestampKey]; exists {
-				return fmt.Errorf(
+				return nil, fmt.Errorf(
 					"water-level loggers %d and %d both produce corrected data at %s; adjust their install/remove events so deployments do not overlap",
 					otherLoggerID,
 					loggerID,
@@ -106,10 +114,14 @@ func ProcessLoggerData(db *sql.DB, siteID int) error {
 	}
 	sort.Slice(corrected, func(i, j int) bool { return corrected[i].Timestamp.Before(corrected[j].Timestamp) })
 
-	return StoreCorrectedRows(db, siteID, corrected)
+	return corrected, nil
 }
 
-func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
+type dataReader interface {
+	Query(string, ...any) (*sql.Rows, error)
+}
+
+func LoadRawData(db dataReader, siteID int) ([]LoggerRawRow, error) {
 
 	rows, err := db.Query(`
 		SELECT
@@ -151,7 +163,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 			return nil, err
 		}
 
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +188,7 @@ func LoadRawData(db *sql.DB, siteID int) ([]LoggerRawRow, error) {
 	return out, rows.Err()
 }
 
-func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error) {
+func LoadManualMeasurements(db dataReader, siteID int) ([]ManualMeasurement, error) {
 
 	rows, err := db.Query(`
 		SELECT
@@ -201,7 +213,7 @@ func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 			return nil, err
 		}
 
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +225,7 @@ func LoadManualMeasurements(db *sql.DB, siteID int) ([]ManualMeasurement, error)
 	return out, rows.Err()
 }
 
-func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
+func LoadLoggerEvents(db dataReader, siteID int) ([]LoggerEvent, error) {
 
 	rows, err := db.Query(`
 		SELECT
@@ -241,7 +253,7 @@ func LoadLoggerEvents(db *sql.DB, siteID int) ([]LoggerEvent, error) {
 			return nil, err
 		}
 
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}
@@ -350,9 +362,16 @@ func StoreCorrectedRows(
 		return err
 	}
 
+	defer tx.Rollback()
+	if err := storeCorrectedRows(tx, siteID, rows); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func storeCorrectedRows(tx *sql.Tx, siteID int, rows []CorrectedRow) error {
 	// 1️⃣ Delete all existing corrected rows for this site
 	if _, err := tx.Exec(`DELETE FROM corrected_data WHERE site_id = $1`, siteID); err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("failed to delete old corrected rows: %w", err)
 	}
 
@@ -390,14 +409,8 @@ func StoreCorrectedRows(
 		query = query[:len(query)-1]
 
 		if _, err := tx.Exec(query, args...); err != nil {
-			_ = tx.Rollback()
 			return fmt.Errorf("failed to insert corrected rows: %w", err)
 		}
-	}
-
-	// 3️⃣ Commit transaction
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
@@ -432,6 +445,14 @@ func buildValidWindows(events []LoggerEvent) ([]TimeWindow, error) {
 		}
 	}
 
+	// A logger still installed remains valid through all available readings.
+	// Do not require an invented future removal event to process its data.
+	if open != nil {
+		windows = append(windows, TimeWindow{
+			Start: *open,
+			End:   time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC),
+		})
+	}
 	return windows, nil
 }
 

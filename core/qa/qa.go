@@ -2,6 +2,7 @@ package qa
 
 import (
 	"aqualog/core/db"
+	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -245,7 +246,7 @@ func FindGaps(siteID int, loggerID int, threshold time.Duration) ([]Gap, error) 
 		if err := rows.Scan(&p.loggerID, &p.name, &ts); err != nil {
 			return nil, err
 		}
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}

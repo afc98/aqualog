@@ -2,6 +2,7 @@ package baro
 
 import (
 	"aqualog/core/db"
+	"aqualog/core/utils"
 	"database/sql"
 	"fmt"
 	"math"
@@ -302,7 +303,7 @@ func loadBaroRows(d *sql.DB, loggerID int) ([]pressurePoint, error) {
 		if err := rows.Scan(&ts, &value, &kind); err != nil {
 			return nil, err
 		}
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +339,7 @@ func loadWaterRows(d *sql.DB, siteID int, loggerID int) ([]waterRow, error) {
 		if err := rows.Scan(&r.id, &r.loggerID, &ts, &r.value, &r.unit, &r.kind); err != nil {
 			return nil, err
 		}
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, err
 		}

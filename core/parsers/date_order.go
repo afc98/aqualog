@@ -112,6 +112,12 @@ func slashDateLayouts(dateOrder string, includeSeconds bool) []string {
 	}
 }
 
+var timezoneSuffix = regexp.MustCompile(`(?i)(?:Z|[+-]\d{2}:?\d{2})$`)
+
+func HasTimeZoneSuffix(raw string) bool {
+	return timezoneSuffix.MatchString(strings.TrimSpace(raw))
+}
+
 func parseTimeWithLayouts(raw string, layouts []string) (time.Time, error) {
 	var lastErr error
 	candidates := []string{raw}
@@ -119,13 +125,16 @@ func parseTimeWithLayouts(raw string, layouts []string) (time.Time, error) {
 	if upper != raw {
 		candidates = append(candidates, upper)
 	}
+	layouts = append(layouts, "2006-01-02T15:04:05", "2006-01-02 15:04:05")
 	for _, candidate := range candidates {
 		for _, layout := range layouts {
-			t, err := time.Parse(layout, candidate)
-			if err == nil {
-				return t, nil
+			for _, suffix := range []string{"", "Z07:00", " Z07:00", "Z0700", " Z0700"} {
+				t, err := time.Parse(layout+suffix, candidate)
+				if err == nil {
+					return t, nil
+				}
+				lastErr = err
 			}
-			lastErr = err
 		}
 	}
 	return time.Time{}, lastErr

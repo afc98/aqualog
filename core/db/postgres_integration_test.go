@@ -3,6 +3,7 @@ package db_test
 import (
 	"aqualog/core/db"
 	"aqualog/core/dbcopy"
+	"aqualog/core/event"
 	"aqualog/core/logger"
 	"aqualog/core/manual"
 	"aqualog/core/project"
@@ -39,6 +40,17 @@ func TestPostgresCoreCRUD(t *testing.T) {
 	l, err := logger.Add(logger.AddParams{SiteID: s.ID, Name: "Logger", Serial: "PG-1"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := event.Add(event.AddParams{LoggerID: l.ID, EventType: "installed", Timestamp: "20260731 06:00:00"}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := event.List(s.ID, l.ID)
+	if err != nil || len(events) != 1 || events[0].Timestamp.Hour() != 6 {
+		t.Fatalf("PostgreSQL event clock time: events=%v err=%v", events, err)
+	}
+	var dataType string
+	if err := conn.QueryRow(`SELECT data_type FROM information_schema.columns WHERE table_name='logger_events' AND column_name='timestamp'`).Scan(&dataType); err != nil || dataType != "timestamp without time zone" {
+		t.Fatalf("event timestamp type=%s err=%v", dataType, err)
 	}
 	if _, err := manual.Add(manual.AddParams{SiteID: s.ID, Timestamp: "20260102 03:04:05", WaterLevel: 1.25}); err != nil {
 		t.Fatal(err)

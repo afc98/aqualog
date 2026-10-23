@@ -2,7 +2,9 @@ package query
 
 import (
 	"aqualog/core/db"
+	"aqualog/core/utils"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -25,11 +27,28 @@ type LoggerDataRow struct {
 type CorrectedDataRow struct {
 	ID             int
 	SiteID         int
+	LoggerID       int
 	Timestamp      time.Time
 	CorrectedValue float64
 	TempC          sql.NullFloat64
 	SalPSU         sql.NullFloat64
 	ECUS           sql.NullFloat64
+}
+
+func (row LoggerDataRow) MarshalJSON() ([]byte, error) {
+	type alias LoggerDataRow
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
+}
+
+func (row CorrectedDataRow) MarshalJSON() ([]byte, error) {
+	type alias CorrectedDataRow
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
 }
 
 type Options struct {
@@ -106,7 +125,7 @@ func QueryCorrectedDataWithOptions(siteID int, opts Options) ([]CorrectedDataRow
 	}
 
 	sqlText := `
-	SELECT id, site_id, timestamp, corrected_value, temp_c, sal_psu, ec_us
+	SELECT id, site_id, (SELECT logger_id FROM logger_data WHERE logger_data.id = corrected_data.logger_data_id), timestamp, corrected_value, temp_c, sal_psu, ec_us
 	FROM corrected_data
 	WHERE site_id = $1
 	`
@@ -134,7 +153,7 @@ func QueryCorrectedDataWithOptions(siteID int, opts Options) ([]CorrectedDataRow
 	var correctedData []CorrectedDataRow
 	for rows.Next() {
 		var row CorrectedDataRow
-		if err := rows.Scan(&row.ID, &row.SiteID, &row.Timestamp, &row.CorrectedValue, &row.TempC, &row.SalPSU, &row.ECUS); err != nil {
+		if err := rows.Scan(&row.ID, &row.SiteID, &row.LoggerID, &row.Timestamp, &row.CorrectedValue, &row.TempC, &row.SalPSU, &row.ECUS); err != nil {
 			return nil, fmt.Errorf("scan corrected_data: %w", err)
 		}
 		correctedData = append(correctedData, row)

@@ -268,6 +268,9 @@ func applySchema(ctx context.Context, database *sql.DB, backend Backend) error {
 				return fmt.Errorf("failed to apply %s schema: %w", backend, err)
 			}
 		}
+		if err := migratePostgresDatasetTimes(ctx, tx); err != nil {
+			return err
+		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("commit schema migration: %w", err)
 		}
@@ -277,6 +280,37 @@ func applySchema(ctx context.Context, database *sql.DB, backend Backend) error {
 		return fmt.Errorf("failed to apply %s schema: %w", backend, err)
 	}
 	return migrateSQLite(database)
+}
+
+// migratePostgresDatasetTimes preserves the UTC clock fields stored by the
+// previous CLI while removing timezone conversion from dataset columns.
+func migratePostgresDatasetTimes(ctx context.Context, tx *sql.Tx) error {
+	var version int
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return fmt.Errorf("read PostgreSQL schema version: %w", err)
+	}
+	if version >= 2 {
+		return nil
+	}
+	for _, table := range []string{"logger_data", "logger_events", "manual_readings", "corrected_data"} {
+		var dataType string
+		err := tx.QueryRowContext(ctx, `SELECT data_type FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = $1 AND column_name = 'timestamp'`, table).Scan(&dataType)
+		if err != nil {
+			return fmt.Errorf("inspect %s.timestamp: %w", table, err)
+		}
+		if dataType == "timestamp with time zone" {
+			statement := fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN timestamp TYPE TIMESTAMP WITHOUT TIME ZONE USING timestamp AT TIME ZONE 'UTC'`, table)
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("migrate %s.timestamp: %w", table, err)
+			}
+		} else if dataType != "timestamp without time zone" {
+			return fmt.Errorf("unsupported %s.timestamp type %q", table, dataType)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations(version) VALUES (2)`); err != nil {
+		return fmt.Errorf("record PostgreSQL timestamp migration: %w", err)
+	}
+	return nil
 }
 
 func migrateSQLite(database *sql.DB) error {

@@ -2,6 +2,8 @@ package event
 
 import (
 	"aqualog/core/db"
+	"aqualog/core/utils"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +22,14 @@ type Event struct {
 	Timestamp time.Time
 	EventType string
 	Notes     string
+}
+
+func (row Event) MarshalJSON() ([]byte, error) {
+	type alias Event
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
 }
 
 type UpdateParams struct {

@@ -2,6 +2,8 @@ package manual
 
 import (
 	"aqualog/core/db"
+	"aqualog/core/utils"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -19,6 +21,14 @@ type ManualReading struct {
 	WaterLevel float64
 	Timestamp  time.Time
 	Notes      string
+}
+
+func (row ManualReading) MarshalJSON() ([]byte, error) {
+	type alias ManualReading
+	return json.Marshal(struct {
+		Timestamp string
+		alias
+	}{Timestamp: utils.FormatDatasetTime(row.Timestamp), alias: alias(row)})
 }
 
 type UpdateParams struct {

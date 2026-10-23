@@ -8,11 +8,12 @@ import (
 )
 
 type importRequest struct {
-	FileType string `json:"file_type"`
-	FilePath string `json:"file_path"`
-	SiteID   int    `json:"site_id"`
-	LoggerID int    `json:"logger_id"`
-	Replace  bool   `json:"replace"`
+	FileType       string `json:"file_type"`
+	FilePath       string `json:"file_path"`
+	SiteID         int    `json:"site_id"`
+	LoggerID       int    `json:"logger_id"`
+	Replace        bool   `json:"replace"`
+	TargetTimezone string `json:"target_timezone"`
 }
 
 func Import(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +28,8 @@ func Import(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, recs, err := importer.ParseLoggerFile(req.FileType, req.FilePath)
+	options := importer.ImportOptions{ReplaceExisting: req.Replace, TargetTimezone: req.TargetTimezone}
+	meta, recs, err := importer.ParseLoggerFileWithOptions(req.FileType, req.FilePath, options)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -40,12 +42,13 @@ func Import(w http.ResponseWriter, r *http.Request) {
 		req.LoggerID,
 		req.FilePath,
 		req.FileType,
-		importer.ImportOptions{ReplaceExisting: req.Replace},
+		options,
 	)
 	if err != nil {
 		writeError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	result.Warning = importer.TimezoneWarning(recs, req.TargetTimezone)
 	writeJSON(w, result)
 }

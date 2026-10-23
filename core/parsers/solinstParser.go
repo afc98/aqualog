@@ -131,6 +131,7 @@ func parseSolinstData(lines []string, headerIndex int, md Metadata, dateOrder st
 
 		rec := Record{
 			Timestamp:       ts,
+			TimezonePresent: HasTimeZoneSuffix(tsStr),
 			LevelM:          level,
 			TempC:           temp,
 			Zero:            0, // Solinst does not provide zero offset per record
@@ -202,6 +203,7 @@ func parseSolinstTimestamp(raw string, dateOrder string) (time.Time, error) {
 func solinstLayouts(dateOrder string) []string {
 	common := []string{
 		"2006/01/02 15:04:05",
+		"02-Jan-06 15:04:05",
 		"02-Jan-06 03:04:05 pm",
 		"02-Jan-06 03:04:05 PM",
 	}

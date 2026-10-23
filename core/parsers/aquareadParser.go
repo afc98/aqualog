@@ -96,10 +96,7 @@ func ParseAquareadWithOptions(path string, opts DateOptions) (*ParsedFile, error
 
 		parts := splitTSV(line)
 
-		// Drop fractional seconds from timestamp
-		tsRaw := parts[idxTimestamp]
-		tsParts := strings.Split(tsRaw, ".")
-		tsStr := tsParts[0]
+		tsStr := parts[idxTimestamp]
 
 		ts, err := parseTimeWithLayouts(tsStr, layouts)
 		if err != nil {
@@ -126,6 +123,7 @@ func ParseAquareadWithOptions(path string, opts DateOptions) (*ParsedFile, error
 
 		rec := Record{
 			Timestamp:       ts,
+			TimezonePresent: HasTimeZoneSuffix(tsStr),
 			LevelM:          value,
 			TempC:           parseFloat(parts[idxTemp]),
 			Zero:            parseFloat(zeroStr),

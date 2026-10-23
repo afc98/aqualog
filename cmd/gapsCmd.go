@@ -3,6 +3,7 @@ package cmd
 import (
 	"aqualog/core/db"
 	"aqualog/core/qa"
+	"aqualog/core/utils"
 	"fmt"
 	"time"
 
@@ -50,8 +51,8 @@ var gapsCmd = &cobra.Command{
 			fmt.Printf("Logger %s (ID %d): %s to %s (%s)\n",
 				gap.LoggerName,
 				gap.LoggerID,
-				gap.Start.Format(time.RFC3339),
-				gap.End.Format(time.RFC3339),
+				utils.FormatDatasetTime(gap.Start),
+				utils.FormatDatasetTime(gap.End),
 				gap.Duration,
 			)
 		}

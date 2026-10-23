@@ -3,6 +3,7 @@ package export
 import (
 	"aqualog/core/db"
 	"aqualog/core/process"
+	"aqualog/core/utils"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -108,7 +109,7 @@ func BuildExport(siteID int) ([]ExportRow, error) {
 		}
 
 		out = append(out, ExportRow{
-			Timestamp:      row.Timestamp.Format(time.RFC3339),
+			Timestamp:      utils.FormatDatasetTime(row.Timestamp),
 			SiteName:       site.Name,
 			LoggerName:     name,
 			LoggerModel:    model,
@@ -272,13 +273,13 @@ func filterRows(rows []ExportRow, opts Options) ([]ExportRow, error) {
 	var from, to time.Time
 	var err error
 	if opts.From != "" {
-		from, err = time.Parse(time.RFC3339, opts.From)
+		from, err = utils.ParseDatasetTime(opts.From)
 		if err != nil {
 			return nil, fmt.Errorf("invalid from timestamp: %w", err)
 		}
 	}
 	if opts.To != "" {
-		to, err = time.Parse(time.RFC3339, opts.To)
+		to, err = utils.ParseDatasetTime(opts.To)
 		if err != nil {
 			return nil, fmt.Errorf("invalid to timestamp: %w", err)
 		}
@@ -288,7 +289,7 @@ func filterRows(rows []ExportRow, opts Options) ([]ExportRow, error) {
 	}
 	out := make([]ExportRow, 0, len(rows))
 	for _, row := range rows {
-		t, err := time.Parse(time.RFC3339, row.Timestamp)
+		t, err := utils.ParseDatasetTime(row.Timestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -345,7 +346,7 @@ func loadCorrectedData(dbConn *sql.DB, siteID int) ([]LoggerCorrectedRow, error)
 			return nil, fmt.Errorf("scan logger_data: %w", err)
 		}
 
-		t, err := time.Parse(time.RFC3339, ts)
+		t, err := utils.ParseDatasetTime(ts)
 		if err != nil {
 			return nil, fmt.Errorf("parse timestamp %q: %w", ts, err)
 		}
